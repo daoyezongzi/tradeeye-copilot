@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TradeEye Copilot</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">财报披露即时研判</p>
+        <h1 id="summary-title">加载中...</h1>
+        <p id="summary-line" class="summary-line"></p>
+      </div>
+      <input id="date-input" type="text" value="20250821" aria-label="披露日期" />
+    </section>
+    <section id="cards" class="cards"></section>
+  </main>
+  <dialog id="evidence-dialog">
+    <h2>依据溯源</h2>
+    <pre id="evidence-content"></pre>
+    <button id="close-dialog">关闭</button>
+  </dialog>
+  <script src="/app.js"></script>
+</body>
+</html>

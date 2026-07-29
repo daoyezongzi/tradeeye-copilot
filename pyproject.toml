@@ -4,11 +4,15 @@ version = "0.1.0"
 description = "A-share earnings disclosure anomaly copilot"
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.111.0",
+    "httpx>=0.27.0",
     "pandas>=2.2.0",
     "pydantic>=2.7.0",
+    "pymupdf>=1.24.0",
     "pyyaml>=6.0.1",
     "python-dotenv>=1.0.1",
     "tushare>=1.4.21",
+    "uvicorn>=0.30.0",
 ]
 
 [project.optional-dependencies]

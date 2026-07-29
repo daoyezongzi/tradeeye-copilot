@@ -1,0 +1,85 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f5f7fb;
+  color: #172033;
+}
+
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #172033;
+  color: white;
+  border-radius: 18px;
+  padding: 28px;
+}
+
+.eyebrow {
+  color: #9fb5ff;
+  margin: 0 0 8px;
+}
+
+.summary-line {
+  color: #d8def0;
+}
+
+#date-input {
+  border: 1px solid #44506a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #101827;
+  color: white;
+}
+
+.cards {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid #e3e7f0;
+  box-shadow: 0 10px 30px rgba(23, 32, 51, 0.06);
+}
+
+.card.red {
+  border-left: 6px solid #c62828;
+}
+
+.card.yellow {
+  border-left: 6px solid #f9a825;
+}
+
+.card.ok {
+  border-left: 6px solid #2e7d32;
+}
+
+.finding {
+  margin: 10px 0;
+  padding: 10px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+button {
+  cursor: pointer;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #244cff;
+  color: white;
+}
+
+pre {
+  white-space: pre-wrap;
+}

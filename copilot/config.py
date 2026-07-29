@@ -15,6 +15,18 @@ class TushareSettings(BaseModel):
     token: str | None = None
 
 
+class LLMSettings(BaseModel):
+    base_url: str = "https://maas.example.com/v1"
+    model: str = "ascend-compatible-model"
+    timeout_seconds: int = 60
+    api_key: str | None = None
+
+
+class NarrativeSettings(BaseModel):
+    pdf_cache_dir: Path = Path("data/pdf_cache")
+    max_section_chars: int = 12000
+
+
 class RuleThresholds(BaseModel):
     receivable_revenue_gap_pct: float = 30.0
     inventory_revenue_gap_pct: float = 30.0
@@ -30,6 +42,8 @@ class RuleSettings(BaseModel):
 class Settings(BaseModel):
     database: DatabaseSettings
     tushare: TushareSettings = Field(default_factory=TushareSettings)
+    llm: LLMSettings = Field(default_factory=LLMSettings)
+    narrative: NarrativeSettings = Field(default_factory=NarrativeSettings)
     rules: RuleSettings = Field(default_factory=RuleSettings)
 
 
@@ -37,4 +51,5 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
     config_path = Path(path)
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     data.setdefault("tushare", {})["token"] = os.getenv("TUSHARE_TOKEN")
+    data.setdefault("llm", {})["api_key"] = os.getenv("ASCEND_API_KEY")
     return Settings.model_validate(data)

@@ -5,6 +5,15 @@ tushare:
   timeout_seconds: 30
   max_retries: 3
 
+llm:
+  base_url: https://maas.example.com/v1
+  model: ascend-compatible-model
+  timeout_seconds: 60
+
+narrative:
+  pdf_cache_dir: data/pdf_cache
+  max_section_chars: 12000
+
 rules:
   thresholds:
     receivable_revenue_gap_pct: 30.0
