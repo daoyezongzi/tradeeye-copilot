@@ -1,0 +1,1 @@
+"""TradeEye Copilot core package."""

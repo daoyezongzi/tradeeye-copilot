@@ -1,0 +1,14 @@
+database:
+  path: data/tradeeye_copilot.sqlite
+
+tushare:
+  timeout_seconds: 30
+  max_retries: 3
+
+rules:
+  thresholds:
+    receivable_revenue_gap_pct: 30.0
+    inventory_revenue_gap_pct: 30.0
+    ocf_to_net_profit_pct: 50.0
+    gross_margin_change_pct: 5.0
+    non_recurring_profit_share_pct: 30.0

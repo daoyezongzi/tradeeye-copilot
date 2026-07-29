@@ -5,8 +5,10 @@ __pycache__/
 venv/
 *.db
 *.sqlite3
+*.sqlite
 data/cache/
 .pytest_cache/
+.pytest_tmp/
 .DS_Store
 .idea/
 .vscode/

@@ -1,0 +1,1 @@
+"""External datasource adapters."""
