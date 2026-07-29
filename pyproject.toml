@@ -26,3 +26,7 @@ pythonpath = ["."]
 filterwarnings = [
     "ignore:Using `httpx` with `starlette.testclient` is deprecated:Warning",
 ]
+
+[tool.setuptools.packages.find]
+include = ["copilot*"]
+exclude = ["web*", "eval*", "artifacts*", "docs*", "tests*"]
