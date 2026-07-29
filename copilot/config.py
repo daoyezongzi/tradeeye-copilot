@@ -27,6 +27,18 @@ class NarrativeSettings(BaseModel):
     max_section_chars: int = 12000
 
 
+class NotifySettings(BaseModel):
+    feishu_enabled: bool = False
+    feishu_webhook: str | None = None
+
+
+class EvalSettings(BaseModel):
+    coverage_pool: list[str] = Field(default_factory=list)
+    start_date: str = "20250801"
+    end_date: str = "20250831"
+    benchmark_output: Path = Path("artifacts/benchmark.json")
+
+
 class RuleThresholds(BaseModel):
     receivable_revenue_gap_pct: float = 30.0
     inventory_revenue_gap_pct: float = 30.0
@@ -44,6 +56,8 @@ class Settings(BaseModel):
     tushare: TushareSettings = Field(default_factory=TushareSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
     narrative: NarrativeSettings = Field(default_factory=NarrativeSettings)
+    notify: NotifySettings = Field(default_factory=NotifySettings)
+    eval: EvalSettings = Field(default_factory=EvalSettings)
     rules: RuleSettings = Field(default_factory=RuleSettings)
 
 
@@ -52,4 +66,5 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     data.setdefault("tushare", {})["token"] = os.getenv("TUSHARE_TOKEN")
     data.setdefault("llm", {})["api_key"] = os.getenv("ASCEND_API_KEY")
+    data.setdefault("notify", {})["feishu_webhook"] = os.getenv("FEISHU_WEBHOOK")
     return Settings.model_validate(data)

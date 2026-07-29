@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+from copilot.eval.backtest import BacktestSummary
 from copilot.models import Context, Finding, Severity
 
 
@@ -22,6 +23,20 @@ class DailySummary(BaseModel):
     yellow_count: int
     ok_count: int
     cards: list[CompanyCard]
+
+
+class RuleDistributionItem(BaseModel):
+    rule_id: str
+    count: int
+
+
+class QuarterlyReview(BaseModel):
+    period_label: str
+    coverage_count: int
+    disclosed_count: int
+    finding_count: int
+    precision_pct: float | None
+    top_rules: list[RuleDistributionItem]
 
 
 def _num(value: float | None) -> str:
@@ -77,4 +92,19 @@ def build_daily_summary(date: str, coverage_count: int, cards: list[CompanyCard]
         yellow_count=yellow_count,
         ok_count=ok_count,
         cards=ordered_cards,
+    )
+
+
+def build_quarterly_review(summary: BacktestSummary, precision_pct: float | None) -> QuarterlyReview:
+    top_rules = [
+        RuleDistributionItem(rule_id=rule_id, count=count)
+        for rule_id, count in sorted(summary.finding_distribution.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    return QuarterlyReview(
+        period_label=f"{summary.start_date}-{summary.end_date}",
+        coverage_count=summary.coverage_count,
+        disclosed_count=summary.disclosed_count,
+        finding_count=summary.finding_count,
+        precision_pct=precision_pct,
+        top_rules=top_rules,
     )

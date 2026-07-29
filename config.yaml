@@ -14,6 +14,16 @@ narrative:
   pdf_cache_dir: data/pdf_cache
   max_section_chars: 12000
 
+notify:
+  feishu_enabled: false
+
+eval:
+  coverage_pool:
+    - 000001.SZ
+  start_date: "20250801"
+  end_date: "20250831"
+  benchmark_output: artifacts/benchmark.json
+
 rules:
   thresholds:
     receivable_revenue_gap_pct: 30.0

@@ -5,6 +5,7 @@ const cards = document.querySelector("#cards");
 const dialog = document.querySelector("#evidence-dialog");
 const evidenceContent = document.querySelector("#evidence-content");
 const closeDialog = document.querySelector("#close-dialog");
+const quarterlyReview = document.querySelector("#quarterly-review");
 
 function severityClass(card) {
   if (card.max_severity === "RED") return "red";
@@ -64,6 +65,26 @@ async function loadDaily(date) {
   }
 }
 
+async function loadQuarterly() {
+  const response = await fetch("/api/quarterly");
+  if (!response.ok) return;
+  const review = await response.json();
+  quarterlyReview.innerHTML = `
+    <div class="metric"><span>区间</span><strong>${review.period_label}</strong></div>
+    <div class="metric"><span>覆盖池</span><strong>${review.coverage_count}</strong></div>
+    <div class="metric"><span>已披露</span><strong>${review.disclosed_count}</strong></div>
+    <div class="metric"><span>命中</span><strong>${review.finding_count}</strong></div>
+    <div class="metric"><span>精确率</span><strong>${review.precision_pct ?? "待复核"}</strong></div>
+  `;
+  for (const item of review.top_rules) {
+    const metric = document.createElement("div");
+    metric.className = "metric";
+    metric.innerHTML = `<span>${item.rule_id}</span><strong>${item.count}</strong>`;
+    quarterlyReview.appendChild(metric);
+  }
+}
+
 closeDialog.addEventListener("click", () => dialog.close());
 dateInput.addEventListener("change", () => loadDaily(dateInput.value));
 loadDaily(dateInput.value);
+loadQuarterly();

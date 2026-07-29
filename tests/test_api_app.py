@@ -68,3 +68,36 @@ def test_evidence_endpoint(make_snapshot):
 
     assert response.status_code == 200
     assert response.json()[0]["field"] == "operating_cash_flow"
+
+
+def test_quarterly_review_endpoint(make_snapshot):
+    from copilot.eval.backtest import BacktestCompanyResult, BacktestSummary
+    from copilot.report.builder import build_quarterly_review
+
+    card = build_company_card(Context(ts_code="000001.SZ", current=make_snapshot()), [])
+    summary = build_daily_summary("20250821", 42, [card])
+    quarterly = build_quarterly_review(
+        BacktestSummary(
+            start_date="20250801",
+            end_date="20250831",
+            coverage_count=42,
+            disclosed_count=1,
+            ok_count=1,
+            data_incomplete_count=0,
+            finding_count=0,
+            finding_distribution={},
+            company_results=[BacktestCompanyResult(ts_code="000001.SZ", period="20250630", status="OK", findings=[])],
+        ),
+        precision_pct=None,
+    )
+
+    class QuarterlyService(FakeReportService):
+        def get_quarterly_review(self):
+            return quarterly
+
+    client = TestClient(create_app(QuarterlyService(card, summary)))
+
+    response = client.get("/api/quarterly")
+
+    assert response.status_code == 200
+    assert response.json()["coverage_count"] == 42

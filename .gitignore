@@ -9,6 +9,7 @@ venv/
 data/cache/
 .pytest_cache/
 .pytest_tmp/
+artifacts/
 .DS_Store
 .idea/
 .vscode/

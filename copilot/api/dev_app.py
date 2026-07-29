@@ -1,6 +1,7 @@
 from copilot.api.app import create_app
+from copilot.eval.backtest import BacktestCompanyResult, BacktestSummary
 from copilot.models import Context, Evidence, Finding, PeriodSnapshot, Severity
-from copilot.report.builder import build_company_card, build_daily_summary
+from copilot.report.builder import build_company_card, build_daily_summary, build_quarterly_review
 
 
 class DemoReportService:
@@ -27,6 +28,20 @@ class DemoReportService:
         )
         self.card = build_company_card(Context(ts_code="000001.SZ", current=snapshot), [finding], attribution="增长主要来自收入改善，但现金回款未同步。")
         self.summary = build_daily_summary("20250821", 42, [self.card])
+        self.quarterly = build_quarterly_review(
+            BacktestSummary(
+                start_date="20250801",
+                end_date="20250831",
+                coverage_count=42,
+                disclosed_count=1,
+                ok_count=1,
+                data_incomplete_count=0,
+                finding_count=1,
+                finding_distribution={"cashflow_quality": 1},
+                company_results=[BacktestCompanyResult(ts_code="000001.SZ", period="20250630", status="OK", findings=[finding])],
+            ),
+            precision_pct=88.9,
+        )
 
     def get_company_card(self, ts_code, period):
         if ts_code == self.card.ts_code and period == self.card.period:
@@ -43,6 +58,9 @@ class DemoReportService:
             if finding.rule_id == rule_id:
                 return finding.evidence
         return []
+
+    def get_quarterly_review(self):
+        return self.quarterly
 
 
 app = create_app(DemoReportService())

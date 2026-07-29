@@ -71,6 +71,31 @@ body {
   border-radius: 10px;
 }
 
+.quarterly {
+  margin-top: 32px;
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid #e3e7f0;
+}
+
+.quarterly-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.metric strong {
+  display: block;
+  font-size: 24px;
+}
+
 button {
   cursor: pointer;
   border: 0;

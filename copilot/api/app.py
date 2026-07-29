@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from copilot.models import Evidence
-from copilot.report.builder import CompanyCard, DailySummary
+from copilot.report.builder import CompanyCard, DailySummary, QuarterlyReview
 
 
 class ReportService(Protocol):
@@ -13,6 +13,8 @@ class ReportService(Protocol):
     def get_daily_summary(self, date: str) -> DailySummary | None: ...
 
     def get_evidence(self, ts_code: str, period: str, rule_id: str) -> list[Evidence]: ...
+
+    def get_quarterly_review(self) -> QuarterlyReview | None: ...
 
 
 def create_app(report_service: ReportService) -> FastAPI:
@@ -35,6 +37,13 @@ def create_app(report_service: ReportService) -> FastAPI:
     @app.get("/api/evidence/{ts_code}/{period}/{rule_id}", response_model=list[Evidence])
     def evidence(ts_code: str, period: str, rule_id: str):
         return report_service.get_evidence(ts_code, period, rule_id)
+
+    @app.get("/api/quarterly", response_model=QuarterlyReview)
+    def quarterly_review():
+        review = report_service.get_quarterly_review()
+        if review is None:
+            raise HTTPException(status_code=404, detail="quarterly review not found")
+        return review
 
     app.mount("/", StaticFiles(directory="web", html=True), name="web")
     return app
