@@ -98,6 +98,32 @@ cards=[]
 - `000001.SZ` 不适合作为当前通用规则 smoke 样本；应临时使用 `20250821` 当天披露的非金融公司，例如 `601012.SH`、`600438.SH` 等，再观察四表字段完整性。
 - 下一步目标：不改正式 `config.yaml` 的前提下，用临时 service/临时 coverage pool 找到一个可出卡样本，并真实触发一次飞书 webhook 静态文本推送。
 
+### 飞书真实烟测
+
+在不修改正式 `config.yaml` 的前提下，使用临时 coverage pool 从 `20250821` 的 Tushare 披露事件中寻找可出卡样本。
+
+烟测结果：
+
+```text
+CANDIDATE_COUNT=16
+SELECTED_TS_CODE=920056.BJ
+SELECTED_PERIOD=20250630
+SMOKE_STATUS=CARD_READY
+FINDING_COUNT=0
+MAX_SEVERITY=None
+SUMMARY_DISCLOSED_COUNT=1
+SUMMARY_CARD_COUNT=1
+FEISHU_SENT=True
+FEISHU_REASON=ok
+```
+
+结论：
+
+- 单票真实 Tushare 抓取 + 分析可以出卡。
+- 披露日汇总可以在临时 coverage pool 下生成 `DailySummary`。
+- 飞书 webhook 静态文本推送已真实发送成功。
+- 当前正式配置仍只有 `000001.SZ`，因此日常披露日汇总是否发送取决于 coverage_pool 是否包含当日实际披露公司。
+
 ### 最新验证结果
 
 ```bash
