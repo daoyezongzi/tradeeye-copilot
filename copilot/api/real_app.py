@@ -5,6 +5,7 @@ from copilot.datasource.fundamentals import TushareFundamentalsClient
 from copilot.datasource.tushare_client import TushareTokenMissing, create_tushare_pro
 from copilot.eval.backtest import BacktestSummary
 from copilot.report.builder import build_daily_summary, build_quarterly_review
+from copilot.rss.service import RssPollResult, RssPollService
 from copilot.service.analyzer import AnalyzerService, CompanyAnalysisResult, CompanyAnalysisStatus
 from copilot.service.report_cache import ReportCache
 from copilot.store.sqlite import SQLiteStore
@@ -28,6 +29,15 @@ class RealReportService:
                 thresholds=self.settings.rules.thresholds,
                 coverage_pool=self.settings.eval.coverage_pool,
                 calendar=TushareDisclosureCalendarClient(pro),
+            )
+        self.rss_service = None
+        if self.analyzer is not None:
+            company_to_ts_code = {ts_code: ts_code for ts_code in self.settings.eval.coverage_pool}
+            self.rss_service = RssPollService(
+                feeds=self.settings.rss.feeds,
+                max_entries=self.settings.rss.max_entries,
+                company_to_ts_code=company_to_ts_code,
+                analyzer=self.analyzer,
             )
 
     def get_company_card(self, ts_code, period):
@@ -79,6 +89,11 @@ class RealReportService:
             self.cache.put_company(card)
         self.cache.put_daily(summary)
         return summary
+
+    def poll_rss(self):
+        if self.rss_service is None:
+            return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])
+        return self.rss_service.poll()
 
 
 app = create_app(RealReportService())

@@ -2,6 +2,7 @@ from copilot.api.app import create_app
 from copilot.eval.backtest import BacktestCompanyResult, BacktestSummary
 from copilot.models import Context, Evidence, Finding, PeriodSnapshot, Severity
 from copilot.report.builder import build_company_card, build_daily_summary, build_quarterly_review
+from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult, CompanyAnalysisStatus
 
 
@@ -72,6 +73,9 @@ class DemoReportService:
         if date == self.summary.date:
             return self.summary
         return build_daily_summary(date, 42, [])
+
+    def poll_rss(self):
+        return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])
 
 
 app = create_app(DemoReportService())
