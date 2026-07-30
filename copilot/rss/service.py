@@ -1,7 +1,7 @@
 from typing import Protocol
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from copilot.rss.announcements import AnnouncementEvent, classify_announcement, parse_rss_entries
 from copilot.service.analyzer import CompanyAnalysisResult, CompanyAnalysisStatus
@@ -17,6 +17,8 @@ class RssPollResult(BaseModel):
     analyzed_count: int
     pending_count: int
     events: list[AnnouncementEvent]
+    ignored_count: int = 0
+    errors: list[str] = Field(default_factory=list)
 
 
 class RssPollService:
@@ -37,22 +39,36 @@ class RssPollService:
 
     def poll(self) -> RssPollResult:
         seen_count = 0
+        ignored_count = 0
+        errors: list[str] = []
         matched: list[AnnouncementEvent] = []
         for feed in self.feeds:
-            response = self.http_client.get(feed)
-            response.raise_for_status()
-            entries = parse_rss_entries(response.text, self.max_entries)
+            try:
+                response = self.http_client.get(feed)
+                response.raise_for_status()
+                entries = parse_rss_entries(response.text, self.max_entries)
+            except Exception as exc:
+                errors.append(f"{feed}: {exc}")
+                continue
             seen_count += len(entries)
             for title, link in entries:
                 event = classify_announcement(title, link, self.company_to_ts_code)
                 if event is None:
+                    ignored_count += 1
                     continue
                 key = (event.ts_code, event.period, event.link)
                 if key in self._seen_keys:
                     continue
-                self._seen_keys.add(key)
-                result = self.analyzer.analyze_company(event.ts_code, event.period)
+                try:
+                    result = self.analyzer.analyze_company(event.ts_code, event.period)
+                except Exception as exc:
+                    event.status = "DATA_PENDING"
+                    errors.append(f"{event.ts_code} {event.period}: {exc}")
+                    matched.append(event)
+                    continue
                 event.status = "ANALYZED" if result.status == CompanyAnalysisStatus.OK else "DATA_PENDING"
+                if event.status == "ANALYZED":
+                    self._seen_keys.add(key)
                 matched.append(event)
         return RssPollResult(
             seen_count=seen_count,
@@ -60,4 +76,6 @@ class RssPollService:
             analyzed_count=sum(1 for event in matched if event.status == "ANALYZED"),
             pending_count=sum(1 for event in matched if event.status == "DATA_PENDING"),
             events=matched,
+            ignored_count=ignored_count,
+            errors=errors,
         )

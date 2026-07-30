@@ -78,7 +78,7 @@ def build_company_card(ctx: Context, findings: list[Finding], attribution: str |
     )
 
 
-def build_daily_summary(date: str, coverage_count: int, cards: list[CompanyCard]) -> DailySummary:
+def build_daily_summary(date: str, coverage_count: int, cards: list[CompanyCard], disclosed_count: int | None = None) -> DailySummary:
     severity_rank = {Severity.RED: 0, Severity.YELLOW: 1, Severity.INFO: 2, None: 3}
     ordered_cards = sorted(cards, key=lambda card: (severity_rank[card.max_severity], -card.max_score, card.ts_code))
     red_count = sum(1 for card in cards if card.max_severity == Severity.RED)
@@ -87,7 +87,7 @@ def build_daily_summary(date: str, coverage_count: int, cards: list[CompanyCard]
     return DailySummary(
         date=date,
         coverage_count=coverage_count,
-        disclosed_count=len(cards),
+        disclosed_count=len(cards) if disclosed_count is None else disclosed_count,
         red_count=red_count,
         yellow_count=yellow_count,
         ok_count=ok_count,

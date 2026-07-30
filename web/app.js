@@ -8,33 +8,38 @@ const closeDialog = document.querySelector("#close-dialog");
 const quarterlyReview = document.querySelector("#quarterly-review");
 const operationStatus = document.querySelector("#operation-status");
 
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, options);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.detail || `HTTP ${response.status}`);
+  }
+  return payload;
+}
+
 const api = {
   async analyzeCompany(tsCode, period) {
-    const response = await fetch("/api/analyze/company", {
+    return requestJson("/api/analyze/company", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ts_code: tsCode, period }),
     });
-    return response.json();
   },
 
   async analyzeDisclosureDay(date) {
-    const response = await fetch("/api/analyze/disclosure-day", {
+    return requestJson("/api/analyze/disclosure-day", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ date }),
     });
-    return response.json();
   },
 
   async sendFeishuDisclosureDay(date) {
-    const response = await fetch(`/api/notify/feishu/disclosure-day/${date}`, { method: "POST" });
-    return response.json();
+    return requestJson(`/api/notify/feishu/disclosure-day/${date}`, { method: "POST" });
   },
 
   async pollRss() {
-    const response = await fetch("/api/rss/poll", { method: "POST" });
-    return response.json();
+    return requestJson("/api/rss/poll", { method: "POST" });
   },
 };
 
@@ -127,30 +132,46 @@ closeDialog.addEventListener("click", () => dialog.close());
 dateInput.addEventListener("change", () => loadDaily(dateInput.value));
 
 document.querySelector("#analyze-company").addEventListener("click", async () => {
-  const tsCode = document.querySelector("#company-ts-code").value.trim();
-  const period = document.querySelector("#company-period").value.trim();
-  const result = await api.analyzeCompany(tsCode, period);
-  setStatus(result);
-  if (result.card) {
-    cards.innerHTML = "";
-    cards.appendChild(renderCard(result.card));
+  try {
+    const tsCode = document.querySelector("#company-ts-code").value.trim();
+    const period = document.querySelector("#company-period").value.trim();
+    const result = await api.analyzeCompany(tsCode, period);
+    setStatus(result);
+    if (result.card) {
+      cards.innerHTML = "";
+      cards.appendChild(renderCard(result.card));
+    }
+  } catch (error) {
+    setStatus({ error: error.message });
   }
 });
 
 document.querySelector("#analyze-disclosure-day").addEventListener("click", async () => {
-  const date = document.querySelector("#disclosure-date").value.trim();
-  const summary = await api.analyzeDisclosureDay(date);
-  setStatus(summary);
-  renderDaily(summary);
+  try {
+    const date = document.querySelector("#disclosure-date").value.trim();
+    const summary = await api.analyzeDisclosureDay(date);
+    setStatus(summary);
+    renderDaily(summary);
+  } catch (error) {
+    setStatus({ error: error.message });
+  }
 });
 
 document.querySelector("#send-feishu").addEventListener("click", async () => {
-  const date = document.querySelector("#disclosure-date").value.trim();
-  setStatus(await api.sendFeishuDisclosureDay(date));
+  try {
+    const date = document.querySelector("#disclosure-date").value.trim();
+    setStatus(await api.sendFeishuDisclosureDay(date));
+  } catch (error) {
+    setStatus({ error: error.message });
+  }
 });
 
 document.querySelector("#poll-rss").addEventListener("click", async () => {
-  setStatus(await api.pollRss());
+  try {
+    setStatus(await api.pollRss());
+  } catch (error) {
+    setStatus({ error: error.message });
+  }
 });
 
 loadDaily(dateInput.value);

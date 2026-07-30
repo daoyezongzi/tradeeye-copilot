@@ -12,6 +12,8 @@ def test_frontend_defines_api_wrapper_methods():
     assert "/api/analyze/disclosure-day" in content
     assert "/api/notify/feishu/disclosure-day/" in content
     assert "/api/rss/poll" in content
+    assert "if (!response.ok)" in content
+    assert "catch (error)" in content
 
 
 def test_frontend_has_minimal_real_data_controls():

@@ -61,28 +61,31 @@ class AnalyzerService:
         return all(snapshot.value(field) is not None for field in _REQUIRED_CURRENT_FIELDS)
 
     def analyze_company(self, ts_code: str, period: str) -> CompanyAnalysisResult:
-        current = self._fetch_and_store(ts_code, period)
-        self._fetch_and_store(ts_code, prior_quarter_period(period))
-        self._fetch_and_store(ts_code, prior_year_period(period))
+        try:
+            current = self._fetch_and_store(ts_code, period)
+            self._fetch_and_store(ts_code, prior_quarter_period(period))
+            self._fetch_and_store(ts_code, prior_year_period(period))
 
-        if not self._current_ready(current):
-            return CompanyAnalysisResult(
-                status=CompanyAnalysisStatus.DATA_NOT_READY,
-                message=f"Tushare 暂未返回 {ts_code} {period} 的完整财务快照",
-            )
+            if not self._current_ready(current):
+                return CompanyAnalysisResult(
+                    status=CompanyAnalysisStatus.DATA_NOT_READY,
+                    message=f"Tushare 暂未返回 {ts_code} {period} 的完整财务快照",
+                )
 
-        ctx = assemble_context(self.store, ts_code, period)
-        check = run_hard_checks(ctx)
-        if check.status != CheckStatus.OK:
-            return CompanyAnalysisResult(
-                status=CompanyAnalysisStatus.DATA_INCOMPLETE,
-                message="；".join(check.messages),
-            )
+            ctx = assemble_context(self.store, ts_code, period)
+            check = run_hard_checks(ctx)
+            if check.status != CheckStatus.OK:
+                return CompanyAnalysisResult(
+                    status=CompanyAnalysisStatus.DATA_INCOMPLETE,
+                    message="；".join(check.messages),
+                )
 
-        findings = run_rules(ctx, build_rules(self.thresholds))
-        self.store.replace_findings(ts_code, period, findings)
-        card = build_company_card(ctx, findings)
-        return CompanyAnalysisResult(status=CompanyAnalysisStatus.OK, message="ok", card=card)
+            findings = run_rules(ctx, build_rules(self.thresholds))
+            self.store.replace_findings(ts_code, period, findings)
+            card = build_company_card(ctx, findings)
+            return CompanyAnalysisResult(status=CompanyAnalysisStatus.OK, message="ok", card=card)
+        except Exception as exc:
+            return CompanyAnalysisResult(status=CompanyAnalysisStatus.ERROR, message=str(exc))
 
     def analyze_disclosure_day(self, date: str) -> DailySummary:
         if self.calendar is None:
@@ -93,4 +96,4 @@ class AnalyzerService:
             result = self.analyze_company(event.ts_code, event.period)
             if result.card is not None:
                 cards.append(result.card)
-        return build_daily_summary(date, coverage_count=len(self.coverage_pool), cards=cards)
+        return build_daily_summary(date, coverage_count=len(self.coverage_pool), cards=cards, disclosed_count=len(events))

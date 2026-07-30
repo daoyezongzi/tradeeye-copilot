@@ -1,3 +1,5 @@
+from fastapi import HTTPException
+
 from copilot.api.app import NotifyResult, create_app
 from copilot.config import load_settings
 from copilot.datasource.calendar import TushareDisclosureCalendarClient
@@ -7,7 +9,7 @@ from copilot.eval.backtest import BacktestSummary
 from copilot.notify.feishu import FeishuNotifier, render_daily_summary_text
 from copilot.report.builder import build_daily_summary, build_quarterly_review
 from copilot.rss.service import RssPollResult, RssPollService
-from copilot.service.analyzer import AnalyzerService, CompanyAnalysisResult, CompanyAnalysisStatus
+from copilot.service.analyzer import AnalyzerService
 from copilot.service.report_cache import ReportCache
 from copilot.store.sqlite import SQLiteStore
 
@@ -33,7 +35,7 @@ class RealReportService:
             )
         self.rss_service = None
         if self.analyzer is not None:
-            company_to_ts_code = {ts_code: ts_code for ts_code in self.settings.eval.coverage_pool}
+            company_to_ts_code = self.settings.rss.company_names or {ts_code: ts_code for ts_code in self.settings.eval.coverage_pool}
             self.rss_service = RssPollService(
                 feeds=self.settings.rss.feeds,
                 max_entries=self.settings.rss.max_entries,
@@ -74,7 +76,7 @@ class RealReportService:
 
     def analyze_company(self, ts_code, period):
         if self.analyzer is None:
-            return CompanyAnalysisResult(status=CompanyAnalysisStatus.ERROR, message="未配置 TUSHARE_TOKEN")
+            raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
         result = self.analyzer.analyze_company(ts_code, period)
         if result.card is not None:
             self.cache.put_company(result.card)
@@ -82,9 +84,7 @@ class RealReportService:
 
     def analyze_disclosure_day(self, date):
         if self.analyzer is None:
-            summary = build_daily_summary(date, len(self.settings.eval.coverage_pool), [])
-            self.cache.put_daily(summary)
-            return summary
+            raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
         summary = self.analyzer.analyze_disclosure_day(date)
         for card in summary.cards:
             self.cache.put_company(card)

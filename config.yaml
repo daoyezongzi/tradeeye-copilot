@@ -27,6 +27,7 @@ eval:
 rss:
   feeds: []
   max_entries: 50
+  company_names: {}
 
 rules:
   thresholds:

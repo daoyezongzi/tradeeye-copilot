@@ -43,6 +43,7 @@ class EvalSettings(BaseModel):
 class RssSettings(BaseModel):
     feeds: list[str] = Field(default_factory=list)
     max_entries: int = 50
+    company_names: dict[str, str] = Field(default_factory=dict)
 
 
 class RuleThresholds(BaseModel):

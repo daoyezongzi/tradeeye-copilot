@@ -33,6 +33,24 @@ rss:
     assert settings.rss.max_entries == 25
 
 
+def test_load_settings_reads_rss_company_names(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+database:
+  path: tmp/app.sqlite
+rss:
+  company_names:
+    平安银行: 000001.SZ
+""".strip(),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(config_path, env_path=tmp_path / "missing.env")
+
+    assert settings.rss.company_names == {"平安银行": "000001.SZ"}
+
+
 def test_load_settings_environment_overrides_dotenv(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yaml"
     env_path = tmp_path / ".env"
