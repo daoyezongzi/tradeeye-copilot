@@ -155,7 +155,33 @@ FEISHU_REASON=ok
 - 扫描真实披露日，收集失败样本和行业分布。
 - 不预先臆造行业规则，先用真实失败原因驱动银行/其他行业规则集修复。
 
-### 最新验证结果
+### 100 支临时覆盖池扫描烟测
+
+在不提交正式 `config.yaml` 股票池、不打印任何 secret 的前提下，用 Tushare 真实数据临时构造 100 支覆盖池：
+
+- 扫描日期：`20250825`
+- 构造方式：取当日 `disclosure_date(ann_date="20250825")` 返回披露事件中的前 100 个去重 `ts_code`
+- 行业映射：通过 `stock_basic` 辅助识别；该批样本均按 `generic` 路由
+
+扫描结果：
+
+```text
+TEMP_COVERAGE_COUNT=100
+DISCLOSED_COUNT=100
+OK_COUNT=100
+DATA_NOT_READY_COUNT=0
+DATA_INCOMPLETE_COUNT=0
+ERROR_COUNT=0
+```
+
+结论：
+
+- 新增披露日诊断链路可以处理 100 支临时真实覆盖池。
+- 该批 `20250825` 非银行样本没有触发字段缺失或行业不适配问题。
+- 银行 hard check 已先做最小分流，避免继续用毛利率、应收账款、存货字段误拒银行上下文。
+- 复测 `000001.SZ / 20250630`，在显式 `bank` 路由下已从 `DATA_NOT_READY` 变为 `OK` 并成功生成 card。
+- 这批 100 支只是烟测样本，未作为正式关注股票池提交进 `config.yaml`。
+
 
 ```bash
 python -m pytest -q --basetemp=.pytest_tmp

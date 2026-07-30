@@ -1,3 +1,4 @@
+from copilot.industry import Industry
 from copilot.models import PeriodSnapshot
 from copilot.service.analyzer import AnalyzerService, CompanyAnalysisStatus
 
@@ -92,7 +93,6 @@ def test_analyze_company_returns_data_not_ready_when_current_snapshot_missing_re
     assert "Tushare 暂未返回" in result.message
     assert result.card is None
 
-
 def test_analyze_company_returns_data_incomplete_when_hard_check_fails():
     current = snapshot(period="20250630", revenue=-1.0)
     fundamentals = FakeFundamentals(
@@ -109,3 +109,29 @@ def test_analyze_company_returns_data_incomplete_when_hard_check_fails():
     assert result.status == CompanyAnalysisStatus.DATA_INCOMPLETE
     assert "current.revenue is negative" in result.message
     assert result.card is None
+
+
+def test_bank_analyze_company_does_not_stop_on_generic_missing_fields():
+    current = snapshot(
+        period="20250630",
+        gross_margin_pct=None,
+        accounts_receivable=None,
+        inventory=None,
+    )
+    fundamentals = FakeFundamentals(
+        {
+            ("000001.SZ", "20250630"): current,
+            ("000001.SZ", "20250331"): snapshot(period="20250331"),
+            ("000001.SZ", "20240630"): snapshot(period="20240630"),
+        }
+    )
+    service = AnalyzerService(
+        fundamentals=fundamentals,
+        store=FakeStore(),
+        company_industries={"000001.SZ": Industry.BANK.value},
+    )
+
+    result = service.analyze_company("000001.SZ", "20250630")
+
+    assert result.status == CompanyAnalysisStatus.OK
+    assert result.card is not None

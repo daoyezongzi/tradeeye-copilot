@@ -32,6 +32,7 @@ class RealReportService:
                 thresholds=self.settings.rules.thresholds,
                 coverage_pool=self.settings.eval.coverage_pool,
                 calendar=TushareDisclosureCalendarClient(pro),
+                company_industries=self.settings.eval.company_industries,
             )
         self.rss_service = None
         if self.analyzer is not None:
@@ -90,6 +91,11 @@ class RealReportService:
             self.cache.put_company(card)
         self.cache.put_daily(summary)
         return summary
+
+    def scan_disclosure_day(self, date):
+        if self.analyzer is None:
+            raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
+        return self.analyzer.scan_disclosure_day(date)
 
     def poll_rss(self):
         if self.rss_service is None:

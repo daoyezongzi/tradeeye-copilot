@@ -7,6 +7,7 @@ const evidenceContent = document.querySelector("#evidence-content");
 const closeDialog = document.querySelector("#close-dialog");
 const quarterlyReview = document.querySelector("#quarterly-review");
 const operationStatus = document.querySelector("#operation-status");
+const diagnosticStatus = document.querySelector("#diagnostic-status");
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, options);
@@ -28,6 +29,14 @@ const api = {
 
   async analyzeDisclosureDay(date) {
     return requestJson("/api/analyze/disclosure-day", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+    });
+  },
+
+  async scanDisclosureDay(date) {
+    return requestJson("/api/scan/disclosure-day", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ date }),
@@ -103,6 +112,17 @@ function renderDaily(summary) {
   }
 }
 
+function renderDiagnostics(result) {
+  diagnosticStatus.innerHTML = `
+    <h2>扫描诊断</h2>
+    <p>披露 ${result.disclosed_count} / 覆盖 ${result.coverage_count} | OK ${result.ok_count} | 待数据 ${result.data_not_ready_count} | 不完整 ${result.data_incomplete_count} | 错误 ${result.error_count}</p>
+    <table>
+      <thead><tr><th>代码</th><th>报告期</th><th>行业</th><th>状态</th><th>原因</th></tr></thead>
+      <tbody>${result.events.map((event) => `<tr><td>${event.ts_code}</td><td>${event.period}</td><td>${event.industry || "unknown"}</td><td>${event.status}</td><td>${event.message}</td></tr>`).join("")}</tbody>
+    </table>
+  `;
+}
+
 async function loadDaily(date) {
   const response = await fetch(`/api/daily/${date}`);
   if (!response.ok) return;
@@ -152,6 +172,17 @@ document.querySelector("#analyze-disclosure-day").addEventListener("click", asyn
     const summary = await api.analyzeDisclosureDay(date);
     setStatus(summary);
     renderDaily(summary);
+  } catch (error) {
+    setStatus({ error: error.message });
+  }
+});
+
+document.querySelector("#scan-disclosure-day").addEventListener("click", async () => {
+  try {
+    const date = document.querySelector("#disclosure-date").value.trim();
+    const result = await api.scanDisclosureDay(date);
+    setStatus(result);
+    renderDiagnostics(result);
   } catch (error) {
     setStatus({ error: error.message });
   }

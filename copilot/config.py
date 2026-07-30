@@ -35,6 +35,7 @@ class NotifySettings(BaseModel):
 
 class EvalSettings(BaseModel):
     coverage_pool: list[str] = Field(default_factory=list)
+    company_industries: dict[str, str] = Field(default_factory=dict)
     start_date: str = "20250801"
     end_date: str = "20250831"
     benchmark_output: Path = Path("artifacts/benchmark.json")

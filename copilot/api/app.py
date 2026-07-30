@@ -8,6 +8,7 @@ from copilot.models import Evidence
 from copilot.report.builder import CompanyCard, DailySummary, QuarterlyReview
 from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult
+from copilot.service.disclosure_scan import DisclosureScanResult
 
 
 class AnalyzeCompanyRequest(BaseModel):
@@ -36,6 +37,8 @@ class ReportService(Protocol):
     def analyze_company(self, ts_code: str, period: str) -> CompanyAnalysisResult: ...
 
     def analyze_disclosure_day(self, date: str) -> DailySummary: ...
+
+    def scan_disclosure_day(self, date: str) -> DisclosureScanResult: ...
 
     def poll_rss(self) -> RssPollResult: ...
 
@@ -77,6 +80,10 @@ def create_app(report_service: ReportService) -> FastAPI:
     @app.post("/api/analyze/disclosure-day", response_model=DailySummary)
     def analyze_disclosure_day(request: AnalyzeDisclosureDayRequest):
         return report_service.analyze_disclosure_day(request.date)
+
+    @app.post("/api/scan/disclosure-day", response_model=DisclosureScanResult)
+    def scan_disclosure_day(request: AnalyzeDisclosureDayRequest):
+        return report_service.scan_disclosure_day(request.date)
 
     @app.post("/api/rss/poll", response_model=RssPollResult)
     def poll_rss():

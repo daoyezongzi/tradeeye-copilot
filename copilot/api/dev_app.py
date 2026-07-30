@@ -4,6 +4,7 @@ from copilot.models import Context, Evidence, Finding, PeriodSnapshot, Severity
 from copilot.report.builder import build_company_card, build_daily_summary, build_quarterly_review
 from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult, CompanyAnalysisStatus
+from copilot.service.disclosure_scan import DisclosureScanEvent, build_scan_result
 
 
 class DemoReportService:
@@ -73,6 +74,21 @@ class DemoReportService:
         if date == self.summary.date:
             return self.summary
         return build_daily_summary(date, 42, [])
+
+    def scan_disclosure_day(self, date):
+        events = []
+        if date == self.summary.date:
+            events.append(
+                DisclosureScanEvent(
+                    ts_code=self.card.ts_code,
+                    period=self.card.period,
+                    status=CompanyAnalysisStatus.OK,
+                    message="ok",
+                    has_card=True,
+                    industry="generic",
+                )
+            )
+        return build_scan_result(date=date, coverage_count=42, events=events)
 
     def poll_rss(self):
         return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])

@@ -146,3 +146,21 @@ pre {
   border-radius: 10px;
   min-height: 40px;
 }
+
+.diagnostic-status {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.diagnostic-status table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+.diagnostic-status th,
+.diagnostic-status td {
+  border: 1px solid #e3e7f0;
+  padding: 8px;
+  text-align: left;
+}
