@@ -16,6 +16,25 @@
       </div>
       <input id="date-input" type="text" value="20250821" aria-label="披露日期" />
     </section>
+    <section class="controls">
+      <div class="control-group">
+        <h2>单票研判</h2>
+        <input id="company-ts-code" type="text" value="000001.SZ" aria-label="股票代码" />
+        <input id="company-period" type="text" value="20250630" aria-label="报告期" />
+        <button id="analyze-company">生成单票研判</button>
+      </div>
+      <div class="control-group">
+        <h2>披露日汇总</h2>
+        <input id="disclosure-date" type="text" value="20250821" aria-label="披露日期" />
+        <button id="analyze-disclosure-day">生成披露日汇总</button>
+        <button id="send-feishu">发送飞书</button>
+      </div>
+      <div class="control-group">
+        <h2>RSS 触发</h2>
+        <button id="poll-rss">轮询 RSS</button>
+      </div>
+      <pre id="operation-status" class="operation-status"></pre>
+    </section>
     <section id="cards" class="cards"></section>
     <section class="quarterly">
       <h2>披露季复盘</h2>

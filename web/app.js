@@ -6,6 +6,41 @@ const dialog = document.querySelector("#evidence-dialog");
 const evidenceContent = document.querySelector("#evidence-content");
 const closeDialog = document.querySelector("#close-dialog");
 const quarterlyReview = document.querySelector("#quarterly-review");
+const operationStatus = document.querySelector("#operation-status");
+
+const api = {
+  async analyzeCompany(tsCode, period) {
+    const response = await fetch("/api/analyze/company", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ts_code: tsCode, period }),
+    });
+    return response.json();
+  },
+
+  async analyzeDisclosureDay(date) {
+    const response = await fetch("/api/analyze/disclosure-day", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+    });
+    return response.json();
+  },
+
+  async sendFeishuDisclosureDay(date) {
+    const response = await fetch(`/api/notify/feishu/disclosure-day/${date}`, { method: "POST" });
+    return response.json();
+  },
+
+  async pollRss() {
+    const response = await fetch("/api/rss/poll", { method: "POST" });
+    return response.json();
+  },
+};
+
+function setStatus(payload) {
+  operationStatus.textContent = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+}
 
 function severityClass(card) {
   if (card.max_severity === "RED") return "red";
@@ -54,15 +89,19 @@ function renderCard(card) {
   return el;
 }
 
-async function loadDaily(date) {
-  const response = await fetch(`/api/daily/${date}`);
-  const summary = await response.json();
+function renderDaily(summary) {
   title.textContent = `${summary.date} 财报研判 · 覆盖池 ${summary.coverage_count} 只`;
   summaryLine.textContent = `今日披露 ${summary.disclosed_count} 家 | 需优先关注 ${summary.red_count} | 留意 ${summary.yellow_count} | 未见异常 ${summary.ok_count}`;
   cards.innerHTML = "";
   for (const card of summary.cards) {
     cards.appendChild(renderCard(card));
   }
+}
+
+async function loadDaily(date) {
+  const response = await fetch(`/api/daily/${date}`);
+  if (!response.ok) return;
+  renderDaily(await response.json());
 }
 
 async function loadQuarterly() {
@@ -86,5 +125,33 @@ async function loadQuarterly() {
 
 closeDialog.addEventListener("click", () => dialog.close());
 dateInput.addEventListener("change", () => loadDaily(dateInput.value));
+
+document.querySelector("#analyze-company").addEventListener("click", async () => {
+  const tsCode = document.querySelector("#company-ts-code").value.trim();
+  const period = document.querySelector("#company-period").value.trim();
+  const result = await api.analyzeCompany(tsCode, period);
+  setStatus(result);
+  if (result.card) {
+    cards.innerHTML = "";
+    cards.appendChild(renderCard(result.card));
+  }
+});
+
+document.querySelector("#analyze-disclosure-day").addEventListener("click", async () => {
+  const date = document.querySelector("#disclosure-date").value.trim();
+  const summary = await api.analyzeDisclosureDay(date);
+  setStatus(summary);
+  renderDaily(summary);
+});
+
+document.querySelector("#send-feishu").addEventListener("click", async () => {
+  const date = document.querySelector("#disclosure-date").value.trim();
+  setStatus(await api.sendFeishuDisclosureDay(date));
+});
+
+document.querySelector("#poll-rss").addEventListener("click", async () => {
+  setStatus(await api.pollRss());
+});
+
 loadDaily(dateInput.value);
 loadQuarterly();

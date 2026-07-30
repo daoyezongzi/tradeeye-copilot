@@ -108,3 +108,41 @@ button {
 pre {
   white-space: pre-wrap;
 }
+
+.controls {
+  margin-top: 24px;
+  display: grid;
+  gap: 12px;
+  background: white;
+  border: 1px solid #e3e7f0;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.control-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.control-group h2 {
+  width: 100%;
+  margin: 0;
+  font-size: 16px;
+}
+
+.control-group input {
+  border: 1px solid #d5dbe8;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.operation-status {
+  margin: 0;
+  padding: 12px;
+  background: #101827;
+  color: #d8def0;
+  border-radius: 10px;
+  min-height: 40px;
+}
