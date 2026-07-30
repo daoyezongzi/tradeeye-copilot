@@ -1,5 +1,127 @@
 # TradeEye Copilot 开发日志
 
+## 2026-07-30
+
+### Real Data Disclosure Event 已完成
+
+对应提交：
+
+- `5effb84 feat: load real data runtime settings`
+- `39ad7d6 feat: create tushare client from environment token`
+- `fb55a94 feat: cache latest analysis reports`
+- `3b3d78e feat: analyze real company fundamentals`
+- `7f5a841 feat: analyze disclosure day summaries`
+- `77c3bf1 feat: expose analysis API routes`
+- `190b09f feat: wire real data app startup`
+- `68d5c8a feat: classify financial report rss announcements`
+- `05e04d1 feat: poll rss announcements as trigger hints`
+- `c17b381 feat: expose rss poll API`
+- `49a544e feat: expose feishu disclosure notification API`
+- `60d03af feat: add frontend real data API controls`
+- `54e8ac3 fix: harden real data disclosure workflow`
+
+已实现：
+
+- `.env` 自动加载，`TUSHARE_TOKEN` / `FEISHU_WEBHOOK` 只从环境读取，不打印值。
+- 真实 Tushare client factory：缺 token 抛明确错误。
+- `AnalyzerService.analyze_company(ts_code, period)`：拉本期、上季、去年同期四表快照，落 SQLite，装配 Context，执行 hard checks 和规则，返回 `CompanyAnalysisResult`。
+- `AnalyzerService.analyze_disclosure_day(date)`：调用 Tushare `disclosure_date`，按 `eval.coverage_pool` 过滤，对命中公司批量跑单票分析并生成 `DailySummary`。
+- `ReportCache`：缓存最近单票 card 和披露日 summary，供 API / 飞书复用。
+- RSS trigger hint：解析 RSS item，识别正式财报标题，排除摘要/更正/补充/英文版；RSS 只作为 trigger，结构化财务数据仍走 Tushare。
+- 飞书静态文本推送 API：`POST /api/notify/feishu/disclosure-day/{date}`。
+- 真实 app：`copilot.api.real_app:app`。
+- Windows 启动脚本：`start_real.bat`。
+- 前端最小真实接口控件：单票研判、披露日汇总、发送飞书、轮询 RSS。
+
+新增 API：
+
+```http
+POST /api/analyze/company
+POST /api/analyze/disclosure-day
+POST /api/rss/poll
+POST /api/notify/feishu/disclosure-day/{date}
+```
+
+### 真实 smoke 发现
+
+已确认 `.env` 存在，且运行时能识别：
+
+```text
+tushare_token_configured=True
+feishu_webhook_configured=True
+coverage_pool=['000001.SZ']
+```
+
+真实单票 smoke：
+
+```text
+POST /api/analyze/company
+{"ts_code": "000001.SZ", "period": "20250630"}
+```
+
+结果：
+
+```text
+status=DATA_NOT_READY
+has_card=False
+```
+
+原因不是“没财报”，而是当前通用规则模型依赖的字段对银行股不适配：
+
+- `income` 返回了营收、归母净利。
+- `cashflow` 返回了经营现金流。
+- `balancesheet` 中 `accounts_receiv` / `inventories` 对银行为空。
+- `fina_indicator` 中 `grossprofit_margin` 对银行为空。
+
+结论：当前 MVP 规则更适合非金融企业；银行股需要单独的银行规则集，例如净息差、不良率、拨备覆盖率、资本充足率等。现阶段 hard check 拒绝出卡是为了避免用不适配字段生成误导性结果。
+
+披露日 smoke：
+
+```text
+POST /api/analyze/disclosure-day
+{"date": "20250821"}
+```
+
+Tushare `disclosure_date(ann_date="20250821")` 返回 16 条披露事件，但当前 `coverage_pool` 只有 `000001.SZ`，该日无平安银行披露，因此：
+
+```text
+coverage_count=1
+disclosed_count=0
+cards=[]
+```
+
+飞书因此不会发送，属于 `no_disclosures` 行为。
+
+### 当前结论
+
+- 真实链路已经接通，但需要选择合适的非金融披露样本完成“出卡 + 飞书”烟测。
+- `000001.SZ` 不适合作为当前通用规则 smoke 样本；应临时使用 `20250821` 当天披露的非金融公司，例如 `601012.SH`、`600438.SH` 等，再观察四表字段完整性。
+- 下一步目标：不改正式 `config.yaml` 的前提下，用临时 service/临时 coverage pool 找到一个可出卡样本，并真实触发一次飞书 webhook 静态文本推送。
+
+### 最新验证结果
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+90 passed
+```
+
+```bash
+cmd.exe //C "python -m pip install -e .[dev]"
+```
+
+结果：
+
+```text
+Successfully installed tradeeye-copilot-0.1.0
+```
+
+---
+
 ## 2026-07-29
 
 ### 当前定位
