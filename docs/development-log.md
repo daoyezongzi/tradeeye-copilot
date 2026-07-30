@@ -182,6 +182,25 @@ ERROR_COUNT=0
 - 复测 `000001.SZ / 20250630`，在显式 `bank` 路由下已从 `DATA_NOT_READY` 变为 `OK` 并成功生成 card。
 - 这批 100 支只是烟测样本，未作为正式关注股票池提交进 `config.yaml`。
 
+### Backend Feishu completion self-review
+
+Completed in this phase:
+
+- Formal Feishu disclosure renderer: total summary, all red/yellow abnormalities, data-problem events, normal-company count.
+- Real notify path now combines `DailySummary` with `DisclosureScanResult`.
+- Company display names are available through `eval.company_names`.
+- Frontend intentionally unchanged in this phase.
+
+Still not done:
+
+- Feishu interactive card/buttons/callback.
+- Stable hosted detail URL for every disclosure day.
+- True industry-specific bank metrics such as NIM/NPL/provision coverage/capital adequacy.
+- Other industry rule packs for securities, insurance, real estate, utilities.
+- Scheduler/retry daemon/RSS retry queue.
+- PDF/LLM management discussion attribution in real cards.
+- Formal replacement of the smoke 100-stock pool with the user's true watchlist.
+
 
 ```bash
 python -m pytest -q --basetemp=.pytest_tmp
