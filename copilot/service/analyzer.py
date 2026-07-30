@@ -7,7 +7,7 @@ from copilot.checks.reconcile import CheckStatus, run_hard_checks
 from copilot.config import RuleThresholds
 from copilot.context import assemble_context, prior_quarter_period, prior_year_period
 from copilot.models import PeriodSnapshot
-from copilot.report.builder import CompanyCard, build_company_card
+from copilot.report.builder import CompanyCard, DailySummary, build_company_card, build_daily_summary
 from copilot.rules.registry import build_rules, run_rules
 
 
@@ -83,3 +83,14 @@ class AnalyzerService:
         self.store.replace_findings(ts_code, period, findings)
         card = build_company_card(ctx, findings)
         return CompanyAnalysisResult(status=CompanyAnalysisStatus.OK, message="ok", card=card)
+
+    def analyze_disclosure_day(self, date: str) -> DailySummary:
+        if self.calendar is None:
+            return build_daily_summary(date, coverage_count=len(self.coverage_pool), cards=[])
+        events = self.calendar.fetch_events(date, set(self.coverage_pool))
+        cards: list[CompanyCard] = []
+        for event in events:
+            result = self.analyze_company(event.ts_code, event.period)
+            if result.card is not None:
+                cards.append(result.card)
+        return build_daily_summary(date, coverage_count=len(self.coverage_pool), cards=cards)
