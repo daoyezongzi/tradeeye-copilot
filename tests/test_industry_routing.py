@@ -24,6 +24,26 @@ eval:
     assert settings.eval.company_industries == {"000001.SZ": "bank", "920056.BJ": "generic"}
 
 
+def test_load_settings_reads_company_names(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+database:
+  path: tmp/app.sqlite
+eval:
+  coverage_pool:
+    - 603026.SH
+  company_names:
+    603026.SH: 石大胜华
+""".strip(),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(config_path, env_path=tmp_path / "missing.env")
+
+    assert settings.eval.company_names == {"603026.SH": "石大胜华"}
+
+
 def test_industry_for_ts_code_defaults_to_unknown():
     assert industry_for_ts_code("000001.SZ", {"000001.SZ": "bank"}) == Industry.BANK
     assert industry_for_ts_code("920056.BJ", {"920056.BJ": "generic"}) == Industry.GENERIC

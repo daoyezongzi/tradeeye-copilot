@@ -1,34 +1,328 @@
 database:
   path: data/tradeeye_copilot.sqlite
-
 tushare:
   timeout_seconds: 30
   max_retries: 3
-
 llm:
   base_url: https://maas.example.com/v1
   model: ascend-compatible-model
   timeout_seconds: 60
-
 narrative:
   pdf_cache_dir: data/pdf_cache
   max_section_chars: 12000
-
 notify:
   feishu_enabled: false
-
 eval:
   coverage_pool:
-    - 000001.SZ
-  start_date: "20250801"
-  end_date: "20250831"
+  - 603026.SH
+  - 600151.SH
+  - 600032.SH
+  - 603958.SH
+  - 600232.SH
+  - 603719.SH
+  - 603000.SH
+  - 600475.SH
+  - 603528.SH
+  - 603335.SH
+  - 605186.SH
+  - 600156.SH
+  - 600756.SH
+  - 603626.SH
+  - 600300.SH
+  - 688256.SH
+  - 603327.SH
+  - 600992.SH
+  - 600888.SH
+  - 600513.SH
+  - 603777.SH
+  - 600985.SH
+  - 603042.SH
+  - 603178.SH
+  - 601015.SH
+  - 600868.SH
+  - 605378.SH
+  - 600476.SH
+  - 600100.SH
+  - 600307.SH
+  - 600425.SH
+  - 600831.SH
+  - 603806.SH
+  - 603711.SH
+  - 600516.SH
+  - 688598.SH
+  - 600916.SH
+  - 600936.SH
+  - 603130.SH
+  - 600653.SH
+  - 603220.SH
+  - 600590.SH
+  - 605068.SH
+  - 603709.SH
+  - 601698.SH
+  - 600271.SH
+  - 600172.SH
+  - 603630.SH
+  - 601222.SH
+  - 600581.SH
+  - 603317.SH
+  - 600645.SH
+  - 600135.SH
+  - 600879.SH
+  - 600996.SH
+  - 605100.SH
+  - 600231.SH
+  - 600052.SH
+  - 603027.SH
+  - 603381.SH
+  - 688246.SH
+  - 600707.SH
+  - 600826.SH
+  - 601666.SH
+  - 603221.SH
+  - 600249.SH
+  - 603768.SH
+  - 600808.SH
+  - 600501.SH
+  - 603578.SH
+  - 600990.SH
+  - 600877.SH
+  - 600893.SH
+  - 600121.SH
+  - 600546.SH
+  - 603533.SH
+  - 603286.SH
+  - 603776.SH
+  - 601992.SH
+  - 601005.SH
+  - 300527.SZ
+  - 000983.SZ
+  - 300256.SZ
+  - 300772.SZ
+  - 002867.SZ
+  - 300969.SZ
+  - 001212.SZ
+  - 300878.SZ
+  - 300352.SZ
+  - 301207.SZ
+  - 300390.SZ
+  - 300757.SZ
+  - 301357.SZ
+  - 300783.SZ
+  - 002007.SZ
+  - 000539.SZ
+  - 000681.SZ
+  - 300760.SZ
+  - 605069.SH
+  - 600809.SH
+  company_industries:
+    603026.SH: generic
+    600151.SH: generic
+    600032.SH: generic
+    603958.SH: generic
+    600232.SH: generic
+    603719.SH: generic
+    603000.SH: generic
+    600475.SH: generic
+    603528.SH: generic
+    603335.SH: generic
+    605186.SH: generic
+    600156.SH: generic
+    600756.SH: generic
+    603626.SH: generic
+    600300.SH: generic
+    688256.SH: generic
+    603327.SH: generic
+    600992.SH: generic
+    600888.SH: generic
+    600513.SH: generic
+    603777.SH: generic
+    600985.SH: generic
+    603042.SH: generic
+    603178.SH: generic
+    601015.SH: generic
+    600868.SH: generic
+    605378.SH: generic
+    600476.SH: generic
+    600100.SH: generic
+    600307.SH: generic
+    600425.SH: generic
+    600831.SH: generic
+    603806.SH: generic
+    603711.SH: generic
+    600516.SH: generic
+    688598.SH: generic
+    600916.SH: generic
+    600936.SH: generic
+    603130.SH: generic
+    600653.SH: generic
+    603220.SH: generic
+    600590.SH: generic
+    605068.SH: generic
+    603709.SH: generic
+    601698.SH: generic
+    600271.SH: generic
+    600172.SH: generic
+    603630.SH: generic
+    601222.SH: generic
+    600581.SH: generic
+    603317.SH: generic
+    600645.SH: generic
+    600135.SH: generic
+    600879.SH: generic
+    600996.SH: generic
+    605100.SH: generic
+    600231.SH: generic
+    600052.SH: generic
+    603027.SH: generic
+    603381.SH: generic
+    688246.SH: generic
+    600707.SH: generic
+    600826.SH: generic
+    601666.SH: generic
+    603221.SH: generic
+    600249.SH: generic
+    603768.SH: generic
+    600808.SH: generic
+    600501.SH: generic
+    603578.SH: generic
+    600990.SH: generic
+    600877.SH: generic
+    600893.SH: generic
+    600121.SH: generic
+    600546.SH: generic
+    603533.SH: generic
+    603286.SH: generic
+    603776.SH: generic
+    601992.SH: generic
+    601005.SH: generic
+    300527.SZ: generic
+    000983.SZ: generic
+    300256.SZ: generic
+    300772.SZ: generic
+    002867.SZ: generic
+    300969.SZ: generic
+    001212.SZ: generic
+    300878.SZ: generic
+    300352.SZ: generic
+    301207.SZ: generic
+    300390.SZ: generic
+    300757.SZ: generic
+    301357.SZ: generic
+    300783.SZ: generic
+    002007.SZ: generic
+    000539.SZ: generic
+    000681.SZ: generic
+    300760.SZ: generic
+    605069.SH: generic
+    600809.SH: generic
+  start_date: '20250801'
+  end_date: '20250831'
   benchmark_output: artifacts/benchmark.json
-
+  company_names:
+    603026.SH: 石大胜华
+    600151.SH: 航天机电
+    600032.SH: 浙江新能
+    603958.SH: 哈森股份
+    600232.SH: 金鹰股份
+    603719.SH: 良品铺子
+    603000.SH: 人民网
+    600475.SH: 华光环能
+    603528.SH: 多伦科技
+    603335.SH: 迪生力
+    605186.SH: 健麾信息
+    600156.SH: 华升股份
+    600756.SH: 浪潮软件
+    603626.SH: 科森科技
+    600300.SH: 维维股份
+    688256.SH: 寒武纪
+    603327.SH: 福蓉科技
+    600992.SH: 贵绳股份
+    600888.SH: 新疆众和
+    600513.SH: 联环药业
+    603777.SH: 来伊份
+    600985.SH: 淮北矿业
+    603042.SH: 华脉科技
+    603178.SH: 圣龙股份
+    601015.SH: 陕西黑猫
+    600868.SH: 梅雁吉祥
+    605378.SH: 野马电池
+    600476.SH: '*ST湘邮'
+    600100.SH: 同方股份
+    600307.SH: 酒钢宏兴
+    600425.SH: 青松建化
+    600831.SH: 广电网络
+    603806.SH: 福斯特
+    603711.SH: 香飘飘
+    600516.SH: 方大炭素
+    688598.SH: 金博股份
+    600916.SH: 中国黄金
+    600936.SH: 北投科技
+    603130.SH: 云中马
+    600653.SH: 申华控股
+    603220.SH: 中贝通信
+    600590.SH: 泰豪科技
+    605068.SH: 明新旭腾
+    603709.SH: 中源家居
+    601698.SH: 中国卫通
+    600271.SH: 航天信息
+    600172.SH: 黄河旋风
+    603630.SH: 拉芳家化
+    601222.SH: 林洋能源
+    600581.SH: '*ST八钢'
+    603317.SH: 天味食品
+    600645.SH: 中源协和
+    600135.SH: 乐凯胶片
+    600879.SH: 航天电子
+    600996.SH: 贵广网络
+    605100.SH: 华丰股份
+    600231.SH: 凌钢股份
+    600052.SH: 东望时代
+    603027.SH: 千禾味业
+    603381.SH: 永臻股份
+    688246.SH: 嘉和美康
+    600707.SH: 彩虹股份
+    600826.SH: 兰生股份
+    601666.SH: 平煤股份
+    603221.SH: 爱丽家居
+    600249.SH: 两面针
+    603768.SH: 常青股份
+    600808.SH: 马钢股份
+    600501.SH: 航天晨光
+    603578.SH: 三星新材
+    600990.SH: 四创电子
+    600877.SH: 电科芯片
+    600893.SH: 航发动力
+    600121.SH: 郑州煤电
+    600546.SH: 山煤国际
+    603533.SH: 掌阅科技
+    603286.SH: 日盈电子
+    603776.SH: 永安行
+    601992.SH: 金隅集团
+    601005.SH: 重庆钢铁
+    300527.SZ: ST应急
+    000983.SZ: 山西焦煤
+    300256.SZ: 星星科技
+    300772.SZ: 运达股份
+    002867.SZ: 周大生
+    300969.SZ: 恒帅股份
+    001212.SZ: 中旗新材
+    300878.SZ: 维康药业
+    300352.SZ: ST信源
+    301207.SZ: 华兰疫苗
+    300390.SZ: 天华新能
+    300757.SZ: 罗博特科
+    301357.SZ: 北方长龙
+    300783.SZ: 三只松鼠
+    002007.SZ: 华兰生物
+    000539.SZ: 粤电力A
+    000681.SZ: 视觉中国
+    300760.SZ: 迈瑞医疗
+    605069.SH: 正和生态
+    600809.SH: 山西汾酒
 rss:
   feeds: []
   max_entries: 50
   company_names: {}
-
 rules:
   thresholds:
     receivable_revenue_gap_pct: 30.0
