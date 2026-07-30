@@ -2,6 +2,7 @@ from copilot.api.app import create_app
 from copilot.eval.backtest import BacktestCompanyResult, BacktestSummary
 from copilot.models import Context, Evidence, Finding, PeriodSnapshot, Severity
 from copilot.report.builder import build_company_card, build_daily_summary, build_quarterly_review
+from copilot.service.analyzer import CompanyAnalysisResult, CompanyAnalysisStatus
 
 
 class DemoReportService:
@@ -61,6 +62,16 @@ class DemoReportService:
 
     def get_quarterly_review(self):
         return self.quarterly
+
+    def analyze_company(self, ts_code, period):
+        if ts_code == self.card.ts_code and period == self.card.period:
+            return CompanyAnalysisResult(status=CompanyAnalysisStatus.OK, message="ok", card=self.card)
+        return CompanyAnalysisResult(status=CompanyAnalysisStatus.DATA_NOT_READY, message="demo service only contains 000001.SZ 20250630")
+
+    def analyze_disclosure_day(self, date):
+        if date == self.summary.date:
+            return self.summary
+        return build_daily_summary(date, 42, [])
 
 
 app = create_app(DemoReportService())

@@ -2,9 +2,20 @@ from typing import Protocol
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from copilot.models import Evidence
 from copilot.report.builder import CompanyCard, DailySummary, QuarterlyReview
+from copilot.service.analyzer import CompanyAnalysisResult
+
+
+class AnalyzeCompanyRequest(BaseModel):
+    ts_code: str
+    period: str
+
+
+class AnalyzeDisclosureDayRequest(BaseModel):
+    date: str
 
 
 class ReportService(Protocol):
@@ -15,6 +26,10 @@ class ReportService(Protocol):
     def get_evidence(self, ts_code: str, period: str, rule_id: str) -> list[Evidence]: ...
 
     def get_quarterly_review(self) -> QuarterlyReview | None: ...
+
+    def analyze_company(self, ts_code: str, period: str) -> CompanyAnalysisResult: ...
+
+    def analyze_disclosure_day(self, date: str) -> DailySummary: ...
 
 
 def create_app(report_service: ReportService) -> FastAPI:
@@ -44,6 +59,14 @@ def create_app(report_service: ReportService) -> FastAPI:
         if review is None:
             raise HTTPException(status_code=404, detail="quarterly review not found")
         return review
+
+    @app.post("/api/analyze/company", response_model=CompanyAnalysisResult)
+    def analyze_company(request: AnalyzeCompanyRequest):
+        return report_service.analyze_company(request.ts_code, request.period)
+
+    @app.post("/api/analyze/disclosure-day", response_model=DailySummary)
+    def analyze_disclosure_day(request: AnalyzeDisclosureDayRequest):
+        return report_service.analyze_disclosure_day(request.date)
 
     app.mount("/", StaticFiles(directory="web", html=True), name="web")
     return app
