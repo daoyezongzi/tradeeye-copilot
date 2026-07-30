@@ -2,6 +2,7 @@ import httpx
 
 from copilot.models import Severity
 from copilot.report.builder import DailySummary
+from copilot.service.disclosure_scan import CompanyAnalysisStatus, DisclosureScanResult
 
 
 def render_daily_summary_text(summary: DailySummary) -> str:
@@ -16,6 +17,59 @@ def render_daily_summary_text(summary: DailySummary) -> str:
         top = card.findings[0]
         prefix = "🔴" if card.max_severity == Severity.RED else "🟡"
         lines.append(f"{prefix} {card.ts_code} {top.title}：{top.detail}")
+    return "\n".join(lines)
+
+
+def _display_name(ts_code: str, company_names: dict[str, str]) -> str:
+    name = company_names.get(ts_code)
+    return f"{ts_code} {name}" if name else ts_code
+
+
+def _abnormal_cards(summary: DailySummary, severity: Severity) -> list:
+    return [card for card in summary.cards if card.max_severity == severity and card.findings]
+
+
+def _card_line(card, company_names: dict[str, str], prefix: str) -> str:
+    top = card.findings[0]
+    return f"{prefix} {_display_name(card.ts_code, company_names)}\n- {top.title}：{top.detail}"
+
+
+def _data_problem_events(scan: DisclosureScanResult):
+    problem_statuses = {
+        CompanyAnalysisStatus.DATA_NOT_READY,
+        CompanyAnalysisStatus.DATA_INCOMPLETE,
+        CompanyAnalysisStatus.ERROR,
+    }
+    return [event for event in scan.events if event.status in problem_statuses]
+
+
+def render_formal_disclosure_text(summary: DailySummary, scan: DisclosureScanResult, company_names: dict[str, str] | None = None) -> str:
+    names = company_names or {}
+    red_cards = _abnormal_cards(summary, Severity.RED)
+    yellow_cards = _abnormal_cards(summary, Severity.YELLOW)
+    data_problems = _data_problem_events(scan)
+    lines = [
+        f"{summary.date} 财报披露研判 · 覆盖池 {summary.coverage_count} 家",
+        "",
+        f"今日披露：{summary.disclosed_count} 家",
+        f"🔴 红色异常：{len(red_cards)} 家",
+        f"🟡 黄色异常：{len(yellow_cards)} 家",
+        f"⚪ 未见异常：{summary.ok_count} 家",
+        f"⚠️ 数据问题：{len(data_problems)} 家",
+    ]
+    lines.extend(["", f"【红色异常 · {len(red_cards)}/{len(red_cards)}】"])
+    lines.extend([_card_line(card, names, "🔴") for card in red_cards] or ["无"])
+    lines.extend(["", f"【黄色异常 · {len(yellow_cards)}/{len(yellow_cards)}】"])
+    lines.extend([_card_line(card, names, "🟡") for card in yellow_cards] or ["无"])
+    lines.extend(["", f"【数据问题 · {len(data_problems)}】"])
+    if data_problems:
+        lines.extend(
+            f"⚠️ {_display_name(event.ts_code, names)} {event.status.value}：{event.message}"
+            for event in data_problems
+        )
+    else:
+        lines.append("无")
+    lines.extend(["", "【未见异常】", f"未见异常：{summary.ok_count} 家，不逐条展开。"])
     return "\n".join(lines)
 
 
