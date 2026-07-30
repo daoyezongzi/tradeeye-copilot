@@ -19,6 +19,11 @@ class AnalyzeDisclosureDayRequest(BaseModel):
     date: str
 
 
+class NotifyResult(BaseModel):
+    sent: bool
+    reason: str
+
+
 class ReportService(Protocol):
     def get_company_card(self, ts_code: str, period: str) -> CompanyCard | None: ...
 
@@ -33,6 +38,8 @@ class ReportService(Protocol):
     def analyze_disclosure_day(self, date: str) -> DailySummary: ...
 
     def poll_rss(self) -> RssPollResult: ...
+
+    def notify_feishu_disclosure_day(self, date: str) -> NotifyResult: ...
 
 
 def create_app(report_service: ReportService) -> FastAPI:
@@ -74,6 +81,10 @@ def create_app(report_service: ReportService) -> FastAPI:
     @app.post("/api/rss/poll", response_model=RssPollResult)
     def poll_rss():
         return report_service.poll_rss()
+
+    @app.post("/api/notify/feishu/disclosure-day/{date}", response_model=NotifyResult)
+    def notify_feishu_disclosure_day(date: str):
+        return report_service.notify_feishu_disclosure_day(date)
 
     app.mount("/", StaticFiles(directory="web", html=True), name="web")
     return app

@@ -1,4 +1,4 @@
-from copilot.api.app import create_app
+from copilot.api.app import NotifyResult, create_app
 from copilot.eval.backtest import BacktestCompanyResult, BacktestSummary
 from copilot.models import Context, Evidence, Finding, PeriodSnapshot, Severity
 from copilot.report.builder import build_company_card, build_daily_summary, build_quarterly_review
@@ -76,6 +76,11 @@ class DemoReportService:
 
     def poll_rss(self):
         return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])
+
+    def notify_feishu_disclosure_day(self, date):
+        if date != self.summary.date:
+            return NotifyResult(sent=False, reason="no_disclosures")
+        return NotifyResult(sent=False, reason="webhook_not_configured")
 
 
 app = create_app(DemoReportService())

@@ -1,9 +1,10 @@
-from copilot.api.app import create_app
+from copilot.api.app import NotifyResult, create_app
 from copilot.config import load_settings
 from copilot.datasource.calendar import TushareDisclosureCalendarClient
 from copilot.datasource.fundamentals import TushareFundamentalsClient
 from copilot.datasource.tushare_client import TushareTokenMissing, create_tushare_pro
 from copilot.eval.backtest import BacktestSummary
+from copilot.notify.feishu import FeishuNotifier, render_daily_summary_text
 from copilot.report.builder import build_daily_summary, build_quarterly_review
 from copilot.rss.service import RssPollResult, RssPollService
 from copilot.service.analyzer import AnalyzerService, CompanyAnalysisResult, CompanyAnalysisStatus
@@ -94,6 +95,18 @@ class RealReportService:
         if self.rss_service is None:
             return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])
         return self.rss_service.poll()
+
+    def notify_feishu_disclosure_day(self, date):
+        summary = self.cache.get_daily(date)
+        if summary is None:
+            summary = self.analyze_disclosure_day(date)
+        if summary.disclosed_count == 0:
+            return NotifyResult(sent=False, reason="no_disclosures")
+        webhook = self.settings.notify.feishu_webhook
+        if not webhook:
+            return NotifyResult(sent=False, reason="webhook_not_configured")
+        sent = FeishuNotifier(webhook).send_text(render_daily_summary_text(summary))
+        return NotifyResult(sent=sent, reason="ok" if sent else "send_failed")
 
 
 app = create_app(RealReportService())
