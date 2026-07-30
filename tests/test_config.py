@@ -55,7 +55,7 @@ rules:
     )
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
 
-    settings = load_settings(config_path)
+    settings = load_settings(config_path, env_path=tmp_path / "missing.env")
 
     assert settings.tushare.token is None
 

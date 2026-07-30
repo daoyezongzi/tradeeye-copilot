@@ -24,6 +24,10 @@ eval:
   end_date: "20250831"
   benchmark_output: artifacts/benchmark.json
 
+rss:
+  feeds: []
+  max_entries: 50
+
 rules:
   thresholds:
     receivable_revenue_gap_pct: 30.0

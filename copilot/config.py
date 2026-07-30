@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 
+from dotenv import load_dotenv
 import yaml
 from pydantic import BaseModel, Field
 
@@ -39,6 +40,11 @@ class EvalSettings(BaseModel):
     benchmark_output: Path = Path("artifacts/benchmark.json")
 
 
+class RssSettings(BaseModel):
+    feeds: list[str] = Field(default_factory=list)
+    max_entries: int = 50
+
+
 class RuleThresholds(BaseModel):
     receivable_revenue_gap_pct: float = 30.0
     inventory_revenue_gap_pct: float = 30.0
@@ -58,10 +64,12 @@ class Settings(BaseModel):
     narrative: NarrativeSettings = Field(default_factory=NarrativeSettings)
     notify: NotifySettings = Field(default_factory=NotifySettings)
     eval: EvalSettings = Field(default_factory=EvalSettings)
+    rss: RssSettings = Field(default_factory=RssSettings)
     rules: RuleSettings = Field(default_factory=RuleSettings)
 
 
-def load_settings(path: str | Path = "config.yaml") -> Settings:
+def load_settings(path: str | Path = "config.yaml", env_path: str | Path = ".env") -> Settings:
+    load_dotenv(env_path, override=False)
     config_path = Path(path)
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     data.setdefault("tushare", {})["token"] = os.getenv("TUSHARE_TOKEN")
