@@ -89,6 +89,78 @@ def split_feishu_text(text: str, max_chars: int = 3500) -> list[str]:
     return [f"[{index}/{total}]\n" + "\n".join(lines) for index, lines in enumerate(chunks, start=1)]
 
 
+def render_disclosure_interactive_card(summary: DailySummary, company_names: dict[str, str] | None = None, base_url: str | None = None) -> dict:
+    names = company_names or {}
+    base = (base_url or "").rstrip("/")
+    elements = [
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"今日披露 {summary.disclosed_count} 家｜红色异常 {summary.red_count}｜黄色异常 {summary.yellow_count}｜未见异常 {summary.ok_count}",
+            },
+        }
+    ]
+    for card in summary.cards[:10]:
+        if not card.findings:
+            continue
+        top = card.findings[0]
+        company = _display_name(card.ts_code, names)
+        detail_url = f"{base}/#/company/{card.ts_code}/{card.period}" if base else ""
+        elements.append(
+            {
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": f"**{company}**\n{top.title}：{top.detail}",
+                },
+            }
+        )
+        elements.append(
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "确认异常"},
+                        "value": {
+                            "action": "review_label",
+                            "label": "TRUE",
+                            "ts_code": card.ts_code,
+                            "period": card.period,
+                            "rule_id": top.rule_id,
+                            "severity": card.max_severity.value,
+                        },
+                    },
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "标记误报"},
+                        "value": {
+                            "action": "review_label",
+                            "label": "FALSE",
+                            "ts_code": card.ts_code,
+                            "period": card.period,
+                            "rule_id": top.rule_id,
+                            "severity": card.max_severity.value,
+                        },
+                    },
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "查看详情"},
+                        **({"url": detail_url} if detail_url else {}),
+                    },
+                ],
+            }
+        )
+    return {
+        "msg_type": "interactive",
+        "card": {
+            "header": {"title": {"tag": "plain_text", "content": f"{summary.date} 财报披露研判"}},
+            "elements": elements,
+        },
+    }
+
+
 class FeishuNotifier:
     def __init__(self, webhook_url: str, http_client: httpx.Client | None = None):
         self.webhook_url = webhook_url
@@ -96,6 +168,15 @@ class FeishuNotifier:
 
     def send_text(self, text: str) -> bool:
         payload = {"msg_type": "text", "content": {"text": text}}
+        try:
+            response = self.http_client.post(self.webhook_url, json=payload)
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return False
+        data = response.json()
+        return data.get("StatusCode", data.get("code", 0)) == 0
+
+    def send_interactive(self, payload: dict) -> bool:
         try:
             response = self.http_client.post(self.webhook_url, json=payload)
             response.raise_for_status()

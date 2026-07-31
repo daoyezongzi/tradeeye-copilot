@@ -40,6 +40,10 @@ class DisclosureJobStore:
         self._started_at[job_id] = time()
         return status
 
+    def list_recent(self, limit: int = 20) -> list[DisclosureJobStatus]:
+        jobs = sorted(self._jobs.values(), key=lambda job: self._started_at[job.job_id], reverse=True)
+        return [self.get(job.job_id) for job in jobs[:limit]]
+
     def get(self, job_id: str) -> DisclosureJobStatus:
         status = self._jobs[job_id]
         status.elapsed_seconds = round(time() - self._started_at[job_id], 1)
@@ -170,6 +174,15 @@ class SQLiteDisclosureJobStore(DisclosureJobStore):
         if job_id not in self._jobs:
             self._load(job_id)
         return super().get(job_id)
+
+    def list_recent(self, limit: int = 20) -> list[DisclosureJobStatus]:
+        self.init_schema()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT job_id FROM disclosure_jobs ORDER BY started_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [self.get(row["job_id"]) for row in rows]
 
     def apply_progress(self, job_id: str, event: DisclosureProgressEvent | None = None, **values) -> DisclosureJobStatus:
         status = super().apply_progress(job_id, event, **values)

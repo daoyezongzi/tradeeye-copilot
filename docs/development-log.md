@@ -2,6 +2,38 @@
 
 ## 2026-07-31
 
+### 阶段归档：后端自动化与飞书交互接口基础
+
+本阶段按“不动前端，但做好接口对接”的约束，补齐产品闭环需要的后端接口基础：
+
+- 新增披露日 job 历史接口：`GET /api/disclosure-day/jobs?limit=20`，供前端后续做刷新恢复和 job history。
+- `DisclosureJobStore` / `SQLiteDisclosureJobStore` 增加 `list_recent()`，SQLite 按 `started_at DESC` 返回最近任务。
+- 新增后端复核状态存储 `ReviewLabelStore`，落 SQLite `review_labels`，以 `(ts_code, period, rule_id)` 作为幂等 upsert key。
+- 新增复核 API：`POST /api/reviews/labels`、`GET /api/reviews/labels`，为前端替代 localStorage 提供接口。
+- 新增飞书 interactive card payload 渲染，卡片包含确认异常、标记误报、查看详情按钮。
+- `notify_feishu_disclosure_day()` 从文本发送升级为 interactive card 发送；文本 preview 仍保留。
+- 新增飞书 callback API：`POST /api/notify/feishu/callback`，支持把卡片按钮动作回写为复核 label。
+- 新增自动化调度入口 `run_disclosure_automation_job()`：启动披露日 job、同步跑完扫描、按配置发送飞书通知，并返回 job_id / scan_status / notify 结果。
+
+自审结论：
+
+- 本阶段未修改 `web/` 前端文件。
+- API 已为前端后续对接预留：job history、复核状态、飞书 callback。
+- 仍未做外部 cron/worker 部署、飞书签名校验、多用户权限、详情页公网 base URL 配置。
+- 飞书卡片详情 URL 支持传入 `base_url`，当前真实发送路径暂未配置公网 base URL。
+
+验证：
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+152 passed
+```
+
 ### 前端产品化 spec 分解
 
 把前端 8 项待办按「改动是否耦合」和「是否卡后端接口」拆成四个 spec，逐个走 spec → plan → 实施，

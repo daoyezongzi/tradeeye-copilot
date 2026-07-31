@@ -46,3 +46,21 @@ def test_sqlite_disclosure_job_store_persists_status_across_instances(tmp_path):
     assert restored.current_stage == "cancelled"
     assert restored.bundle.scan.disclosed_count == 1
     assert second.should_cancel(job.job_id) is True
+
+
+def test_sqlite_disclosure_job_store_lists_recent_jobs_across_instances(tmp_path):
+    path = tmp_path / "jobs.sqlite"
+    first = SQLiteDisclosureJobStore(path, company_names={"603026.SH": "石大胜华"})
+    first.init_schema()
+    older = first.start("20250824")
+    newer = first.start("20250825")
+    first.mark_failed(older.job_id, "boom")
+    first.mark_completed(newer.job_id, _bundle("20250825"))
+
+    second = SQLiteDisclosureJobStore(path, company_names={"603026.SH": "石大胜华"})
+    second.init_schema()
+    jobs = second.list_recent(limit=2)
+
+    assert [job.job_id for job in jobs] == [newer.job_id, older.job_id]
+    assert jobs[0].status == "completed"
+    assert jobs[0].bundle.scan.disclosed_count == 1

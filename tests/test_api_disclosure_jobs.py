@@ -71,6 +71,28 @@ class FakeJobService:
     def run_disclosure_day_job(self, job_id):
         self.ran_background_jobs.append(job_id)
 
+    def list_disclosure_day_jobs(self, limit=20):
+        assert limit == 2
+        return [
+            {
+                "job_id": "job-2",
+                "date": "20250826",
+                "status": "completed",
+                "processed_count": 2,
+                "total_count": 2,
+                "ok_count": 2,
+                "data_problem_count": 0,
+                "current_ts_code": None,
+                "current_name": None,
+                "current_period": None,
+                "current_stage": "completed",
+                "elapsed_seconds": 3.0,
+                "logs": [],
+                "bundle": None,
+            },
+            self.get_disclosure_day_job("job-1"),
+        ]
+
     def get_disclosure_day_job(self, job_id):
         assert job_id == "job-1"
         return {
@@ -131,3 +153,12 @@ def test_disclosure_day_job_routes_start_poll_and_cancel():
     assert cancelled.status_code == 200
     assert cancelled.json()["status"] == "cancelled"
     assert service.cancelled_jobs == ["job-1"]
+
+
+def test_disclosure_day_job_routes_list_recent_jobs():
+    client = TestClient(create_app(FakeJobService()))
+
+    response = client.get("/api/disclosure-day/jobs?limit=2")
+
+    assert response.status_code == 200
+    assert [job["job_id"] for job in response.json()] == ["job-2", "job-1"]

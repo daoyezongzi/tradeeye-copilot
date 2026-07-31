@@ -10,6 +10,7 @@ class FakeNotifier:
     def __init__(self):
         self.sent_text = None
         self.sent_parts = None
+        self.sent_payload = None
 
     def send_text(self, text):
         self.sent_text = text
@@ -17,6 +18,10 @@ class FakeNotifier:
 
     def send_text_parts(self, parts):
         self.sent_parts = parts
+        return True
+
+    def send_interactive(self, payload):
+        self.sent_payload = payload
         return True
 
 
@@ -80,6 +85,9 @@ class BundleNotifyService(RealReportService):
     def _send_feishu_text_parts(self, parts):
         return self.notifier.send_text_parts(parts)
 
+    def _send_feishu_interactive(self, payload):
+        return self.notifier.send_interactive(payload)
+
 
 def test_notify_feishu_uses_one_bundle_call():
     service = BundleNotifyService()
@@ -88,6 +96,7 @@ def test_notify_feishu_uses_one_bundle_call():
 
     assert result == NotifyResult(sent=True, reason="ok")
     assert service.analyzer.bundle_calls == 1
-    assert "603026.SH 石大胜华" in service.notifier.sent_parts[0]
+    assert service.notifier.sent_payload["msg_type"] == "interactive"
+    assert "603026.SH 石大胜华" in str(service.notifier.sent_payload["card"]["elements"])
     assert service.cache.companies == ["603026.SH"]
     assert service.cache.daily == "20250825"

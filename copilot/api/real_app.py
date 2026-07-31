@@ -6,12 +6,13 @@ from copilot.datasource.calendar import TushareDisclosureCalendarClient
 from copilot.datasource.fundamentals import TushareFundamentalsClient
 from copilot.datasource.tushare_client import TushareTokenMissing, create_tushare_pro
 from copilot.eval.backtest import BacktestSummary
-from copilot.notify.feishu import FeishuNotifier, render_formal_disclosure_text, split_feishu_text
+from copilot.notify.feishu import FeishuNotifier, render_disclosure_interactive_card, render_formal_disclosure_text, split_feishu_text
 from copilot.report.builder import build_daily_summary, build_quarterly_review
 from copilot.rss.service import RssPollResult, RssPollService
 from copilot.service.analyzer import AnalyzerService
 from copilot.service.disclosure_jobs import SQLiteDisclosureJobStore
 from copilot.service.report_cache import ReportCache
+from copilot.service.review_store import ReviewLabelStore
 from copilot.store.sqlite import SQLiteStore
 
 
@@ -24,6 +25,8 @@ class RealReportService:
             company_names=getattr(self.settings.eval, "company_names", {}),
         )
         self.job_store.init_schema()
+        self.review_store = ReviewLabelStore(self.settings.database.path)
+        self.review_store.init_schema()
         self.store = SQLiteStore(self.settings.database.path)
         self.store.init_schema()
         try:
@@ -137,6 +140,9 @@ class RealReportService:
         finally:
             self.job_store.set_active(None)
 
+    def list_disclosure_day_jobs(self, limit=20):
+        return self.job_store.list_recent(limit)
+
     def get_disclosure_day_job(self, job_id):
         return self.job_store.get(job_id)
 
@@ -149,6 +155,12 @@ class RealReportService:
     def scan_disclosure_day(self, date):
         return self.analyze_disclosure_day_bundle(date).scan
 
+    def upsert_review_label(self, label):
+        return self.review_store.upsert_label(**label.model_dump())
+
+    def list_review_labels(self, ts_code=None, period=None):
+        return self.review_store.list_labels(ts_code=ts_code, period=period)
+
     def poll_rss(self):
         if self.rss_service is None:
             return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])
@@ -159,6 +171,12 @@ class RealReportService:
         if not webhook:
             return False
         return FeishuNotifier(webhook).send_text_parts(parts)
+
+    def _send_feishu_interactive(self, payload):
+        webhook = self.settings.notify.feishu_webhook
+        if not webhook:
+            return False
+        return FeishuNotifier(webhook).send_interactive(payload)
 
     def _render_disclosure_text(self, date):
         bundle = self.analyze_disclosure_day_bundle(date)
@@ -176,11 +194,13 @@ class RealReportService:
         return FeishuPreview(date=date, text=text, sendable=reason == "ok", reason=reason)
 
     def notify_feishu_disclosure_day(self, date):
-        text, reason = self._render_disclosure_text(date)
-        if reason != "ok":
-            return NotifyResult(sent=False, reason=reason)
-        parts = split_feishu_text(text)
-        sent = self._send_feishu_text_parts(parts)
+        bundle = self.analyze_disclosure_day_bundle(date)
+        if bundle.summary.disclosed_count == 0 and bundle.scan.disclosed_count == 0:
+            return NotifyResult(sent=False, reason="no_disclosures")
+        if not self.settings.notify.feishu_webhook:
+            return NotifyResult(sent=False, reason="webhook_not_configured")
+        payload = render_disclosure_interactive_card(bundle.summary, self.settings.eval.company_names)
+        sent = self._send_feishu_interactive(payload)
         return NotifyResult(sent=sent, reason="ok" if sent else "send_failed")
 
 

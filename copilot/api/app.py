@@ -2,13 +2,14 @@ from typing import Protocol
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from copilot.models import Evidence
 from copilot.report.builder import CompanyCard, DailySummary, QuarterlyReview
 from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult
 from copilot.service.disclosure_scan import DisclosureAnalysisBundle, DisclosureScanResult
+from copilot.service.review_store import StoredReviewLabel
 
 
 class AnalyzeCompanyRequest(BaseModel):
@@ -18,6 +19,36 @@ class AnalyzeCompanyRequest(BaseModel):
 
 class AnalyzeDisclosureDayRequest(BaseModel):
     date: str
+
+
+class ReviewLabelRequest(BaseModel):
+    ts_code: str
+    period: str
+    rule_id: str
+    label: str
+    notes: str = ""
+    severity: str | None = None
+    industry: str | None = None
+    reviewer: str | None = None
+
+
+class FeishuCallbackAction(BaseModel):
+    value: dict = Field(default_factory=dict)
+
+
+class FeishuCallbackOperator(BaseModel):
+    name: str | None = None
+    user_id: str | None = None
+
+
+class FeishuCallbackRequest(BaseModel):
+    action: FeishuCallbackAction
+    operator: FeishuCallbackOperator | None = None
+
+
+class FeishuCallbackResult(BaseModel):
+    ok: bool
+    reason: str
 
 
 class NotifyResult(BaseModel):
@@ -79,9 +110,15 @@ class ReportService(Protocol):
 
     def run_disclosure_day_job(self, job_id: str) -> DisclosureJobStatus: ...
 
+    def list_disclosure_day_jobs(self, limit: int = 20) -> list[DisclosureJobStatus]: ...
+
     def get_disclosure_day_job(self, job_id: str) -> DisclosureJobStatus: ...
 
     def cancel_disclosure_day_job(self, job_id: str) -> DisclosureJobStatus: ...
+
+    def upsert_review_label(self, label: ReviewLabelRequest) -> StoredReviewLabel: ...
+
+    def list_review_labels(self, ts_code: str | None = None, period: str | None = None) -> list[StoredReviewLabel]: ...
 
     def poll_rss(self) -> RssPollResult: ...
 
@@ -145,6 +182,10 @@ def create_app(report_service: ReportService) -> FastAPI:
         background_tasks.add_task(report_service.run_disclosure_day_job, job_id)
         return job
 
+    @app.get("/api/disclosure-day/jobs", response_model=list[DisclosureJobStatus])
+    def list_disclosure_day_jobs(limit: int = 20):
+        return report_service.list_disclosure_day_jobs(limit)
+
     @app.get("/api/disclosure-day/jobs/{job_id}", response_model=DisclosureJobStatus)
     def get_disclosure_day_job(job_id: str):
         return report_service.get_disclosure_day_job(job_id)
@@ -153,9 +194,39 @@ def create_app(report_service: ReportService) -> FastAPI:
     def cancel_disclosure_day_job(job_id: str):
         return report_service.cancel_disclosure_day_job(job_id)
 
+    @app.post("/api/reviews/labels", response_model=StoredReviewLabel)
+    def upsert_review_label(label: ReviewLabelRequest):
+        return report_service.upsert_review_label(label)
+
+    @app.get("/api/reviews/labels", response_model=list[StoredReviewLabel])
+    def list_review_labels(ts_code: str | None = None, period: str | None = None):
+        return report_service.list_review_labels(ts_code=ts_code, period=period)
+
     @app.post("/api/rss/poll", response_model=RssPollResult)
     def poll_rss():
         return report_service.poll_rss()
+
+    @app.post("/api/notify/feishu/callback", response_model=FeishuCallbackResult)
+    def feishu_callback(callback: FeishuCallbackRequest):
+        value = callback.action.value
+        if value.get("action") != "review_label":
+            return FeishuCallbackResult(ok=False, reason="ignored")
+        reviewer = None
+        if callback.operator is not None:
+            reviewer = callback.operator.name or callback.operator.user_id
+        report_service.upsert_review_label(
+            ReviewLabelRequest(
+                ts_code=value["ts_code"],
+                period=value["period"],
+                rule_id=value["rule_id"],
+                label=value["label"],
+                notes=value.get("notes", ""),
+                severity=value.get("severity"),
+                industry=value.get("industry"),
+                reviewer=reviewer,
+            )
+        )
+        return FeishuCallbackResult(ok=True, reason="review_recorded")
 
     @app.post("/api/notify/feishu/disclosure-day/{date}/preview", response_model=FeishuPreview)
     def preview_feishu_disclosure_day(date: str):

@@ -7,6 +7,7 @@ from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult, CompanyAnalysisStatus
 from copilot.service.disclosure_jobs import DisclosureJobStore
 from copilot.service.disclosure_scan import build_analysis_bundle
+from copilot.service.review_store import StoredReviewLabel
 
 DEMO_DATE = "20250821"
 DEMO_PERIOD = "20250630"
@@ -120,6 +121,7 @@ class DemoReportService:
         self.summary = self.bundle.summary
         self.cards = {(card.ts_code, card.period): card for card in self.summary.cards}
         self.job_store = DisclosureJobStore(company_names=COMPANY_NAMES)
+        self.review_labels = {}
         first_finding = self.summary.cards[0].findings[0]
         self.quarterly = build_quarterly_review(
             BacktestSummary(
@@ -189,11 +191,27 @@ class DemoReportService:
         bundle = self.analyze_disclosure_day_bundle(job.date)
         return self.job_store.mark_completed(job.job_id, bundle)
 
+    def list_disclosure_day_jobs(self, limit=20):
+        return self.job_store.list_recent(limit)
+
     def get_disclosure_day_job(self, job_id):
         return self.job_store.get(job_id)
 
     def cancel_disclosure_day_job(self, job_id):
         return self.job_store.request_cancel(job_id)
+
+    def upsert_review_label(self, label):
+        stored = StoredReviewLabel(**label.model_dump(), updated_at=0.0)
+        self.review_labels[(stored.ts_code, stored.period, stored.rule_id)] = stored
+        return stored
+
+    def list_review_labels(self, ts_code=None, period=None):
+        labels = list(self.review_labels.values())
+        if ts_code is not None:
+            labels = [label for label in labels if label.ts_code == ts_code]
+        if period is not None:
+            labels = [label for label in labels if label.period == period]
+        return labels
 
     def poll_rss(self):
         return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])
