@@ -1,0 +1,100 @@
+from copilot.models import Finding, Severity
+from copilot.report.builder import CompanyCard
+from copilot.service.analyzer import CompanyAnalysisResult
+from copilot.service.disclosure_scan import CompanyAnalysisStatus, DisclosureScanEvent, build_analysis_bundle
+
+
+def test_build_analysis_bundle_derives_summary_and_scan_from_one_result_set():
+    card = CompanyCard(
+        ts_code="603026.SH",
+        period="20250630",
+        fact_line="fact",
+        findings=[Finding(rule_id="x", severity=Severity.RED, title="异常", detail="证据", evidence=[], score=99.0)],
+        max_severity=Severity.RED,
+        max_score=99.0,
+    )
+    results = [
+        ("603026.SH", "20250630", "generic", CompanyAnalysisResult(status=CompanyAnalysisStatus.OK, message="ok", card=card)),
+        ("000001.SZ", "20250630", "bank", CompanyAnalysisResult(status=CompanyAnalysisStatus.DATA_NOT_READY, message="missing", card=None)),
+    ]
+
+    bundle = build_analysis_bundle(date="20250825", coverage_count=2, results=results)
+
+    assert bundle.date == "20250825"
+    assert bundle.summary.coverage_count == 2
+    assert bundle.summary.disclosed_count == 2
+    assert bundle.summary.red_count == 1
+    assert [card.ts_code for card in bundle.summary.cards] == ["603026.SH"]
+    assert bundle.scan.coverage_count == 2
+    assert bundle.scan.disclosed_count == 2
+    assert bundle.scan.data_not_ready_count == 1
+    assert bundle.scan.events == [
+        DisclosureScanEvent(ts_code="603026.SH", period="20250630", status=CompanyAnalysisStatus.OK, message="ok", has_card=True, industry="generic"),
+        DisclosureScanEvent(ts_code="000001.SZ", period="20250630", status=CompanyAnalysisStatus.DATA_NOT_READY, message="missing", has_card=False, industry="bank"),
+    ]
+
+
+from copilot.datasource.calendar import DisclosureEvent
+from copilot.models import PeriodSnapshot
+from copilot.service.analyzer import AnalyzerService
+
+
+class BundleCalendar:
+    def fetch_events(self, date, coverage_pool):
+        return [
+            DisclosureEvent(ts_code="603026.SH", ann_date=date, period="20250630"),
+            DisclosureEvent(ts_code="000001.SZ", ann_date=date, period="20250630"),
+        ]
+
+
+class BundleFundamentals:
+    def __init__(self):
+        self.calls = []
+
+    def fetch_snapshot(self, ts_code, period):
+        self.calls.append((ts_code, period))
+        if ts_code == "000001.SZ":
+            return PeriodSnapshot(ts_code=ts_code, period=period)
+        return PeriodSnapshot(
+            ts_code=ts_code,
+            period=period,
+            revenue=100.0,
+            net_profit=10.0,
+            deducted_net_profit=9.0,
+            gross_margin_pct=30.0,
+            operating_cash_flow=8.0,
+            accounts_receivable=20.0,
+            inventory=15.0,
+        )
+
+
+class BundleStore:
+    def __init__(self):
+        self.snapshots = {}
+
+    def upsert_snapshot(self, snapshot):
+        self.snapshots[(snapshot.ts_code, snapshot.period)] = snapshot
+
+    def get_snapshot(self, ts_code, period):
+        return self.snapshots.get((ts_code, period))
+
+    def replace_findings(self, ts_code, period, findings):
+        pass
+
+
+def test_analyzer_analyze_disclosure_day_bundle_fetches_each_event_once():
+    fundamentals = BundleFundamentals()
+    service = AnalyzerService(
+        fundamentals=fundamentals,
+        store=BundleStore(),
+        coverage_pool=["603026.SH", "000001.SZ"],
+        calendar=BundleCalendar(),
+        company_industries={"603026.SH": "generic", "000001.SZ": "bank"},
+    )
+
+    bundle = service.analyze_disclosure_day_bundle("20250825")
+
+    assert bundle.summary.disclosed_count == 2
+    assert bundle.scan.disclosed_count == 2
+    assert len([call for call in fundamentals.calls if call[0] == "603026.SH" and call[1] == "20250630"]) == 1
+    assert len([call for call in fundamentals.calls if call[0] == "000001.SZ" and call[1] == "20250630"]) == 1

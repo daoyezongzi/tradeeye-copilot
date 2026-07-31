@@ -9,7 +9,7 @@ from copilot.industry import industry_for_ts_code
 from copilot.models import PeriodSnapshot
 from copilot.report.builder import CompanyCard, DailySummary, build_company_card, build_daily_summary
 from copilot.rules.registry import build_rules, run_rules
-from copilot.service.disclosure_scan import CompanyAnalysisStatus, DisclosureScanEvent, DisclosureScanResult, build_scan_result
+from copilot.service.disclosure_scan import CompanyAnalysisStatus, DisclosureAnalysisBundle, DisclosureScanResult, build_analysis_bundle
 
 
 class FundamentalsProvider(Protocol):
@@ -91,33 +91,19 @@ class AnalyzerService:
         except Exception as exc:
             return CompanyAnalysisResult(status=CompanyAnalysisStatus.ERROR, message=str(exc))
 
-    def analyze_disclosure_day(self, date: str) -> DailySummary:
+    def analyze_disclosure_day_bundle(self, date: str) -> DisclosureAnalysisBundle:
         if self.calendar is None:
-            return build_daily_summary(date, coverage_count=len(self.coverage_pool), cards=[])
+            return build_analysis_bundle(date, coverage_count=len(self.coverage_pool), results=[])
         events = self.calendar.fetch_events(date, set(self.coverage_pool))
-        cards: list[CompanyCard] = []
-        for event in events:
-            result = self.analyze_company(event.ts_code, event.period)
-            if result.card is not None:
-                cards.append(result.card)
-        return build_daily_summary(date, coverage_count=len(self.coverage_pool), cards=cards, disclosed_count=len(events))
-
-    def scan_disclosure_day(self, date: str) -> DisclosureScanResult:
-        if self.calendar is None:
-            return build_scan_result(date, coverage_count=len(self.coverage_pool), events=[])
-        events = self.calendar.fetch_events(date, set(self.coverage_pool))
-        scan_events: list[DisclosureScanEvent] = []
+        results = []
         for event in events:
             result = self.analyze_company(event.ts_code, event.period)
             industry = industry_for_ts_code(event.ts_code, self.company_industries).value
-            scan_events.append(
-                DisclosureScanEvent(
-                    ts_code=event.ts_code,
-                    period=event.period,
-                    status=result.status,
-                    message=result.message,
-                    has_card=result.card is not None,
-                    industry=industry,
-                )
-            )
-        return build_scan_result(date, coverage_count=len(self.coverage_pool), events=scan_events)
+            results.append((event.ts_code, event.period, industry, result))
+        return build_analysis_bundle(date=date, coverage_count=len(self.coverage_pool), results=results)
+
+    def analyze_disclosure_day(self, date: str) -> DailySummary:
+        return self.analyze_disclosure_day_bundle(date).summary
+
+    def scan_disclosure_day(self, date: str) -> DisclosureScanResult:
+        return self.analyze_disclosure_day_bundle(date).scan
