@@ -167,6 +167,9 @@ class RealReportService:
     def list_review_labels(self, ts_code=None, period=None):
         return self.review_store.list_labels(ts_code=ts_code, period=period)
 
+    def delete_review_label(self, ts_code, period, rule_id):
+        return self.review_store.delete_label(ts_code=ts_code, period=period, rule_id=rule_id)
+
     def get_review_metrics(self, ts_code=None, period=None):
         return self.review_metrics.compute_breakdown(ts_code=ts_code, period=period)
 

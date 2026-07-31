@@ -33,3 +33,18 @@ def test_review_label_store_upserts_and_lists_labels(tmp_path):
     assert labels[0].label == "TRUE"
     assert labels[0].notes == "确认异常"
     assert labels[0].reviewer == "analyst-b"
+
+
+def test_review_label_store_deletes_one_label(tmp_path):
+    store = ReviewLabelStore(tmp_path / "reviews.sqlite")
+    store.upsert_label(
+        ts_code="603026.SH",
+        period="20250630",
+        rule_id="cashflow_quality",
+        label="TRUE",
+    )
+
+    deleted = store.delete_label(ts_code="603026.SH", period="20250630", rule_id="cashflow_quality")
+
+    assert deleted is True
+    assert store.list_labels(ts_code="603026.SH", period="20250630") == []

@@ -37,7 +37,8 @@ const snackbarText = el("snackbar-text");
 
 /* ---------- 状态 ---------- */
 
-const REVIEW_STORAGE_KEY = "tradeeye.review.labels.v1";
+const REVIEW_EXPORT_COLUMNS = ["ts_code", "period", "rule_id", "label", "notes", "severity", "industry"];
+
 /* 严重度做双重编码：颜色 + 文字标签，色盲或黑白打印下仍可分辨 */
 const SEVERITY_META = {
   RED: { label: "需优先追问", tag: "RED", cls: "red", note: "规则判定为红色，建议当日跟进" },
@@ -53,7 +54,7 @@ const state = {
   previewDate: null,
   activeJobId: null,
   jobPollTimer: null,
-  reviewLabels: loadReviewLabels(),
+  reviewLabels: {},
 };
 
 /* ---------- 日期与报告期 ---------- */
@@ -182,6 +183,26 @@ const api = {
 
   async getQuarterly() {
     return requestJson("/api/quarterly");
+  },
+
+  async listReviewLabels() {
+    return requestJson("/api/reviews/labels");
+  },
+
+  async saveReviewLabel(label) {
+    return requestJson("/api/reviews/labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(label),
+    });
+  },
+
+  async deleteReviewLabel(tsCode, period, ruleId) {
+    return requestJson(`/api/reviews/labels/${tsCode}/${period}/${ruleId}`, { method: "DELETE" });
+  },
+
+  async getReviewMetrics() {
+    return requestJson("/api/reviews/metrics");
   },
 };
 
@@ -511,7 +532,8 @@ function renderFinding(card, finding) {
 function renderReviewActions(card) {
   const wrap = document.createElement("div");
   wrap.className = "review-actions";
-  const current = state.reviewLabels[reviewKey(card.ts_code, card.period)];
+  const ruleId = card.findings[0]?.rule_id || "";
+  const current = state.reviewLabels[reviewKey(card.ts_code, card.period, ruleId)];
 
   for (const label of ["TRUE", "FALSE", "UNREVIEWED"]) {
     const chip = makeChip(reviewLabelText(label));
@@ -519,9 +541,11 @@ function renderReviewActions(card) {
     chip.setAttribute("tabindex", "0");
     chip.setAttribute("aria-pressed", String((current?.label || "UNREVIEWED") === label));
     const activate = () => {
-      setReviewLabel(card, label);
-      renderCards();
-      renderReview();
+      setReviewLabel(card, label).then(() => {
+        renderCards();
+        renderReview();
+        loadReviewMetrics();
+      });
     };
     chip.addEventListener("click", activate);
     chip.addEventListener("keydown", (event) => {
@@ -769,8 +793,8 @@ function renderDiagnostics(result) {
 
 /* ---------- 复核状态 ---------- */
 
-function reviewKey(tsCode, period) {
-  return `${tsCode}|${period}`;
+function reviewKey(tsCode, period, ruleId) {
+  return `${tsCode}|${period}|${ruleId}`;
 }
 
 function reviewLabelText(label) {
@@ -780,53 +804,73 @@ function reviewLabelText(label) {
 }
 
 function loadReviewLabels() {
+  return api.listReviewLabels().then((labels) => {
+    state.reviewLabels = Object.fromEntries(labels.map((entry) => [reviewKey(entry.ts_code, entry.period, entry.rule_id), entry]));
+    renderCards();
+    renderReview();
+    return labels;
+  });
+}
+
+async function saveReviewLabel(card, label) {
+  const scanEvent = state.bundle?.scan.events.find((event) => event.ts_code === card.ts_code && event.period === card.period);
+  const saved = await api.saveReviewLabel({
+    ts_code: card.ts_code,
+    period: card.period,
+    rule_id: card.findings[0]?.rule_id || "",
+    label,
+    notes: "",
+    severity: card.max_severity || "",
+    industry: scanEvent?.industry || "unknown",
+  });
+  state.reviewLabels[reviewKey(saved.ts_code, saved.period, saved.rule_id)] = saved;
+  return saved;
+}
+
+async function clearReviewLabel(card) {
+  const ruleId = card.findings[0]?.rule_id || "";
+  const current = state.reviewLabels[reviewKey(card.ts_code, card.period, ruleId)];
+  const targetRuleId = current?.rule_id || ruleId;
+  if (targetRuleId) {
+    await api.deleteReviewLabel(card.ts_code, card.period, targetRuleId);
+  }
+  delete state.reviewLabels[reviewKey(card.ts_code, card.period, targetRuleId)];
+}
+
+async function setReviewLabel(card, label) {
   try {
-    return JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) || "{}");
+    if (label === "UNREVIEWED") {
+      await clearReviewLabel(card);
+    } else {
+      await saveReviewLabel(card, label);
+    }
+    notify(`${card.ts_code} 已标注为${reviewLabelText(label)}`);
   } catch (error) {
-    return {};
+    setStatus({ error: error.message });
+    notify(error.message, true);
   }
 }
 
-function persistReviewLabels() {
-  window.localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(state.reviewLabels));
-}
-
-function setReviewLabel(card, label) {
-  const key = reviewKey(card.ts_code, card.period);
-  if (label === "UNREVIEWED") {
-    delete state.reviewLabels[key];
-  } else {
-    const scanEvent = state.bundle?.scan.events.find((event) => event.ts_code === card.ts_code && event.period === card.period);
-    state.reviewLabels[key] = {
-      ts_code: card.ts_code,
-      period: card.period,
-      rule_id: card.findings[0]?.rule_id || "",
-      label,
-      notes: "",
-      severity: card.max_severity || "",
-      industry: scanEvent?.industry || "unknown",
-    };
+async function loadReviewMetrics() {
+  try {
+    const metrics = await api.getReviewMetrics();
+    renderReviewMetrics(metrics);
+  } catch (error) {
+    setStatus({ error: error.message });
   }
-  persistReviewLabels();
-  notify(`${card.ts_code} 已标注为${reviewLabelText(label)}`);
 }
 
-function renderReview() {
-  const entries = Object.values(state.reviewLabels);
-  const trueCount = entries.filter((entry) => entry.label === "TRUE").length;
-  const falseCount = entries.filter((entry) => entry.label === "FALSE").length;
-  const precision = entries.length > 0 ? ((trueCount / entries.length) * 100).toFixed(1) : "待复核";
-
-  const metrics = [
-    { label: "已复核", value: entries.length },
-    { label: "✓ 有效", value: trueCount },
-    { label: "✗ 误报", value: falseCount },
-    { label: "精确率", value: entries.length > 0 ? `${precision}%` : precision },
+function renderReviewMetrics(metrics) {
+  const overall = metrics?.overall || {};
+  const items = [
+    { label: "已复核", value: overall.reviewed_count || 0 },
+    { label: "✓ 有效", value: overall.true_positive_count || 0 },
+    { label: "✗ 误报", value: overall.false_positive_count || 0 },
+    { label: "精确率", value: overall.precision_pct == null ? "待复核" : `${overall.precision_pct.toFixed(1)}%` },
   ];
   reviewMetrics.replaceChildren(
-    ...metrics.map((item) => {
+    ...items.map((item) => {
       const node = document.createElement("div");
-      // 文本型取值用较小字号，衬线大数字只留给真正的数字
       node.className = typeof item.value === "number" ? "metric" : "metric wide";
       const label = document.createElement("span");
       label.textContent = item.label;
@@ -836,6 +880,10 @@ function renderReview() {
       return node;
     })
   );
+}
+
+function renderReview() {
+  const entries = Object.values(state.reviewLabels);
 
   if (entries.length === 0) {
     reviewTable.replaceChildren(makeEmpty("尚无标注，在工作台公司卡上标注有效或误报"));
@@ -916,14 +964,8 @@ function exportBundleCsv() {
 }
 
 function exportReviewCsv() {
-  const entries = Object.values(state.reviewLabels);
-  if (entries.length === 0) {
-    notify("尚无标注可导出", true);
-    return;
-  }
-  const header = ["ts_code", "period", "rule_id", "label", "notes", "severity", "industry"];
-  const rows = entries.map((entry) => [entry.ts_code, entry.period, entry.rule_id, entry.label, entry.notes, entry.severity, entry.industry]);
-  downloadFile("manual_review.csv", toCsv(header, rows), "text/csv");
+  window.location.href = "/api/reviews/labels.csv";
+  notify("正在导出 review labels CSV");
 }
 
 /* ---------- 数据加载 ---------- */
@@ -1245,14 +1287,6 @@ createMenuButton({
 });
 el("export-review-csv").addEventListener("click", exportReviewCsv);
 
-el("clear-review").addEventListener("click", () => {
-  state.reviewLabels = {};
-  persistReviewLabels();
-  renderReview();
-  renderCards();
-  notify("已清空本地标注");
-});
-
 for (const button of document.querySelectorAll("#severity-filters button")) {
   button.addEventListener("click", () => {
     state.filter = button.dataset.filter;
@@ -1274,6 +1308,11 @@ async function boot() {
   await loadMeta();
   renderCards();
   renderReview();
+  loadReviewLabels().catch((error) => {
+    setStatus({ error: error.message });
+    notify(error.message, true);
+  });
+  loadReviewMetrics();
   loadQuarterly();
   loadJobHistory();
   await applyRoute();

@@ -103,3 +103,12 @@ class ReviewLabelStore:
                 params,
             ).fetchall()
         return [StoredReviewLabel(**dict(row)) for row in rows]
+
+    def delete_label(self, ts_code: str, period: str, rule_id: str) -> bool:
+        self.init_schema()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM review_labels WHERE ts_code = ? AND period = ? AND rule_id = ?",
+                (ts_code, period, rule_id),
+            )
+        return cursor.rowcount > 0

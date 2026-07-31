@@ -132,11 +132,20 @@ def test_stable_hash_urls_for_day_and_company(js):
     assert 'window.addEventListener("hashchange", applyRoute)' in js
 
 
-def test_review_state_ui_exports_manual_review_columns(html, js):
+def test_review_state_ui_uses_backend_review_labels(html, js):
     assert 'id="view-review"' in html
     assert 'id="export-review-csv"' in html
-    assert "REVIEW_STORAGE_KEY" in js
+    assert 'id="clear-review"' not in html
+    assert "REVIEW_STORAGE_KEY" not in js
+    assert "window.localStorage" not in js
     assert "renderReviewActions" in js
+    assert "loadReviewLabels" in js
+    assert "saveReviewLabel" in js
+    assert "clearReviewLabel" in js
+    assert "loadReviewMetrics" in js
+    assert '"/api/reviews/labels"' in js
+    assert '"/api/reviews/metrics"' in js
+    assert '"/api/reviews/labels.csv"' in js
     # 列结构需与 eval/manual_review_template.csv 对齐，并保留评估分组需要的维度
     template_header = Path("eval/manual_review_template.csv").read_text(encoding="utf-8").splitlines()[0]
     assert template_header == "ts_code,period,rule_id,label,notes,severity,industry"

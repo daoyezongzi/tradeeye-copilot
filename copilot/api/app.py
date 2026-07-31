@@ -139,6 +139,8 @@ class ReportService(Protocol):
 
     def list_review_labels(self, ts_code: str | None = None, period: str | None = None) -> list[StoredReviewLabel]: ...
 
+    def delete_review_label(self, ts_code: str, period: str, rule_id: str) -> bool: ...
+
     def get_review_metrics(self, ts_code: str | None = None, period: str | None = None) -> PrecisionBreakdown: ...
 
     def run_disclosure_automation(self, date: str, notify: bool = True) -> AutomationDisclosureDayResult: ...
@@ -245,6 +247,10 @@ def create_app(report_service: ReportService) -> FastAPI:
     @app.get("/api/reviews/labels", response_model=list[StoredReviewLabel])
     def list_review_labels(ts_code: str | None = None, period: str | None = None):
         return report_service.list_review_labels(ts_code=ts_code, period=period)
+
+    @app.delete("/api/reviews/labels/{ts_code}/{period}/{rule_id}")
+    def delete_review_label(ts_code: str, period: str, rule_id: str):
+        return {"deleted": report_service.delete_review_label(ts_code=ts_code, period=period, rule_id=rule_id)}
 
     @app.post("/api/automation/disclosure-day", response_model=AutomationDisclosureDayResult)
     def run_disclosure_automation(request: AutomationDisclosureDayRequest):

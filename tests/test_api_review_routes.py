@@ -10,6 +10,7 @@ from copilot.service.review_store import StoredReviewLabel
 class FakeReviewService:
     def __init__(self):
         self.saved = []
+        self.deleted = []
 
     def get_company_card(self, ts_code, period):
         return None
@@ -81,6 +82,10 @@ class FakeReviewService:
             )
         ]
 
+    def delete_review_label(self, ts_code, period, rule_id):
+        self.deleted.append((ts_code, period, rule_id))
+        return True
+
 
 def test_review_label_routes_upsert_and_list():
     service = FakeReviewService()
@@ -108,3 +113,14 @@ def test_review_label_routes_upsert_and_list():
 
     assert listed.status_code == 200
     assert listed.json()[0]["reviewer"] == "analyst-a"
+
+
+def test_review_label_route_deletes_label():
+    service = FakeReviewService()
+    client = TestClient(create_app(service))
+
+    deleted = client.delete("/api/reviews/labels/603026.SH/20250630/cashflow_quality")
+
+    assert deleted.status_code == 200
+    assert deleted.json() == {"deleted": True}
+    assert service.deleted == [("603026.SH", "20250630", "cashflow_quality")]

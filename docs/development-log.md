@@ -2,6 +2,37 @@
 
 ## 2026-07-31
 
+### 阶段归档：复核状态后端化
+
+本阶段完成前端 Spec 3，把复核状态从浏览器 `localStorage` 迁到后端 `review_labels`：
+
+- 前端启动时调用 `GET /api/reviews/labels` 加载复核标签，卡片按钮状态以后端返回为准。
+- 标注有效/误报改为 `POST /api/reviews/labels`，写入后端复核表。
+- 「待复核」恢复为删除语义：新增 `DELETE /api/reviews/labels/{ts_code}/{period}/{rule_id}`，从后端删除单条标签。
+- 复核指标改为读取 `GET /api/reviews/metrics`，与后端 precision 评估口径一致。
+- 复核 CSV 导出改为 `GET /api/reviews/labels.csv`，不再由前端内存拼 CSV。
+- 移除清空本地标注按钮与全部 `localStorage` 复核状态路径。
+
+自审结论：
+
+- 后端复核主键是 `(ts_code, period, rule_id)`，前端 key 已同步包含 `rule_id`，避免同一公司多规则标注互相覆盖。
+- `UNREVIEWED` 不落库为一条标签，而是走 DELETE，保持“未复核不计入 precision”的原语义。
+- `diff --check` 干净。
+
+验证：
+
+```bash
+python -m pytest tests/test_review_store.py tests/test_api_review_routes.py tests/test_frontend_productization.py tests/test_frontend_contracts.py tests/test_frontend_diagnostics.py -q --basetemp=.pytest_tmp
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+25 passed
+167 passed
+```
+
 ### 阶段归档：前端 job history 与刷新恢复
 
 本阶段完成前端 Spec 2，把此前后端已就绪的披露日 job history 接到工作台开发者区：
@@ -190,7 +221,7 @@ python -m pytest -q --basetemp=.pytest_tmp
 | --- | --- | --- | --- | --- |
 | 1 | 扫描入口与信息架构收口 | 合并扫描入口、弱化扫描诊断、整理高级入口、清理遗留 wrapper | 无 | **已落地**（见上文 Spec 1 归档） |
 | 2 | job 恢复与 history | 补 job 恢复 UI | job 列表接口 | **已落地**（见上文 Spec 2 归档） |
-| 3 | 复核状态后端化 | 复核状态后端化、后端导出接口 | 持久层与路由 | 后端已就绪，前端未开始，无 spec/plan |
+| 3 | 复核状态后端化 | 复核状态后端化、后端导出接口 | 持久层与路由 | **已落地**（见上文 Spec 3 归档） |
 | 4 | 飞书卡片化 | 飞书 interactive card + callback | 卡片渲染与 callback 路由 | callback 侧已就绪，卡片渲染未做，前端未开始，无 spec/plan |
 
 分组理由：
@@ -210,7 +241,7 @@ Spec 1 完成时的接口就绪情况——后端在前端做 Spec 1 期间并�
 | Spec | 后端接口 | 前端现状 | UI 改动量 |
 | --- | --- | --- | --- |
 | 2 | `GET /api/disclosure-day/jobs`、`list_recent()` 已接入 | 开发者区已有扫描历史，可刷新与恢复运行中/已完成 job | 已完成 |
-| 3 | `POST/GET /api/reviews/labels`、`GET /api/reviews/labels.csv` 已就绪 | 复核仍走 localStorage（`web/app.js:779`、`:786`），导出仍是前端内存生成 | 小到中：复核队列改走接口，导出项改指后端 URL |
+| 3 | `POST/GET/DELETE /api/reviews/labels`、`GET /api/reviews/labels.csv` 已接入 | 复核状态以后端为准，指标与 CSV 导出均走后端接口 | 已完成 |
 | 4 | callback、verification token、`PUBLIC_BASE_URL`、通知日志、发送幂等均已就绪 | 仍是文本预览/发送 | 小：预览展示卡片结构 |
 
 开工前需先定的两点：

@@ -215,6 +215,9 @@ class DemoReportService:
             labels = [label for label in labels if label.period == period]
         return labels
 
+    def delete_review_label(self, ts_code, period, rule_id):
+        return self.review_labels.pop((ts_code, period, rule_id), None) is not None
+
     def get_review_metrics(self, ts_code=None, period=None):
         labels = list(self.review_labels.values())
         if ts_code is not None:
