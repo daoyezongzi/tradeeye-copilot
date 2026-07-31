@@ -14,6 +14,7 @@ from copilot.service.analyzer import AnalyzerService
 from copilot.service.disclosure_jobs import SQLiteDisclosureJobStore
 from copilot.service.notify_store import NotifyLogStore
 from copilot.service.report_cache import ReportCache
+from copilot.service.review_metrics import ReviewMetricsService
 from copilot.service.review_store import ReviewLabelStore
 from copilot.store.sqlite import SQLiteStore
 
@@ -29,6 +30,7 @@ class RealReportService:
         self.job_store.init_schema()
         self.review_store = ReviewLabelStore(self.settings.database.path)
         self.review_store.init_schema()
+        self.review_metrics = ReviewMetricsService(self.review_store)
         self.notify_store = NotifyLogStore(self.settings.database.path)
         self.notify_store.init_schema()
         self.store = SQLiteStore(self.settings.database.path)
@@ -164,6 +166,9 @@ class RealReportService:
 
     def list_review_labels(self, ts_code=None, period=None):
         return self.review_store.list_labels(ts_code=ts_code, period=period)
+
+    def get_review_metrics(self, ts_code=None, period=None):
+        return self.review_metrics.compute_breakdown(ts_code=ts_code, period=period)
 
     def run_disclosure_automation(self, date, notify=True):
         return run_disclosure_automation_job(DisclosureAutomationJob(date=date, notify=notify), self)

@@ -8,6 +8,7 @@ from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult, CompanyAnalysisStatus
 from copilot.service.disclosure_jobs import DisclosureJobStore
 from copilot.service.disclosure_scan import build_analysis_bundle
+from copilot.eval.manual_review import ReviewLabel, compute_precision_breakdown
 from copilot.service.review_store import StoredReviewLabel
 
 DEMO_DATE = "20250821"
@@ -213,6 +214,25 @@ class DemoReportService:
         if period is not None:
             labels = [label for label in labels if label.period == period]
         return labels
+
+    def get_review_metrics(self, ts_code=None, period=None):
+        labels = list(self.review_labels.values())
+        if ts_code is not None:
+            labels = [label for label in labels if label.ts_code == ts_code]
+        if period is not None:
+            labels = [label for label in labels if label.period == period]
+        return compute_precision_breakdown([
+            ReviewLabel(
+                ts_code=label.ts_code,
+                period=label.period,
+                rule_id=label.rule_id,
+                label=label.label,
+                notes=label.notes,
+                severity=label.severity,
+                industry=label.industry,
+            )
+            for label in labels
+        ])
 
     def run_disclosure_automation(self, date, notify=True):
         return run_disclosure_automation_job(DisclosureAutomationJob(date=date, notify=notify), self)

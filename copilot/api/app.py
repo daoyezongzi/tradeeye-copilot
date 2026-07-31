@@ -1,9 +1,12 @@
+from io import StringIO
+import csv
 from typing import Protocol
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from copilot.eval.manual_review import PrecisionBreakdown
 from copilot.models import Evidence
 from copilot.report.builder import CompanyCard, DailySummary, QuarterlyReview
 from copilot.rss.service import RssPollResult
@@ -136,6 +139,8 @@ class ReportService(Protocol):
 
     def list_review_labels(self, ts_code: str | None = None, period: str | None = None) -> list[StoredReviewLabel]: ...
 
+    def get_review_metrics(self, ts_code: str | None = None, period: str | None = None) -> PrecisionBreakdown: ...
+
     def run_disclosure_automation(self, date: str, notify: bool = True) -> AutomationDisclosureDayResult: ...
 
     def list_notify_logs(self, limit: int = 20) -> list[NotifyLogEvent]: ...
@@ -215,6 +220,23 @@ def create_app(report_service: ReportService) -> FastAPI:
     @app.post("/api/disclosure-day/jobs/{job_id}/cancel", response_model=DisclosureJobStatus)
     def cancel_disclosure_day_job(job_id: str):
         return report_service.cancel_disclosure_day_job(job_id)
+
+    @app.get("/api/reviews/labels.csv")
+    def export_review_labels_csv(ts_code: str | None = None, period: str | None = None):
+        labels = report_service.list_review_labels(ts_code=ts_code, period=period)
+        buffer = StringIO()
+        writer = csv.DictWriter(
+            buffer,
+            fieldnames=["ts_code", "period", "rule_id", "label", "notes", "severity", "industry", "reviewer", "updated_at"],
+        )
+        writer.writeheader()
+        for label in labels:
+            writer.writerow(label.model_dump())
+        return Response(content=buffer.getvalue(), media_type="text/csv")
+
+    @app.get("/api/reviews/metrics", response_model=PrecisionBreakdown)
+    def get_review_metrics(ts_code: str | None = None, period: str | None = None):
+        return report_service.get_review_metrics(ts_code=ts_code, period=period)
 
     @app.post("/api/reviews/labels", response_model=StoredReviewLabel)
     def upsert_review_label(label: ReviewLabelRequest):

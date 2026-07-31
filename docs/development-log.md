@@ -2,6 +2,37 @@
 
 ## 2026-07-31
 
+### 阶段归档：复核到评估回流接口
+
+本阶段继续做纯后端闭环，把已落库的 `review_labels` 接到 precision 评估与导出接口，便于前端迁移复核状态后立即看到规则质量反馈：
+
+- 新增 `ReviewMetricsService`，从 `ReviewLabelStore` 读取后端复核标签并转换为 `ReviewLabel`。
+- 复用 `compute_precision_breakdown()` 输出 overall、by_rule、by_severity、by_industry precision。
+- 新增评估接口：`GET /api/reviews/metrics?ts_code=...&period=...`。
+- 新增复核 CSV 导出：`GET /api/reviews/labels.csv?ts_code=...&period=...`。
+- `RealReportService` 接入 `ReviewMetricsService`；demo app 使用内存复核标签计算相同结构。
+- 后端现有 JSON 复核列表接口继续保留：`GET /api/reviews/labels`。
+
+可一起测的接口：
+
+```http
+POST /api/reviews/labels
+GET  /api/reviews/metrics?period=20250630
+GET  /api/reviews/labels.csv?period=20250630
+```
+
+验证：
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+164 passed
+```
+
 ### 阶段归档：等前端期间的后端可联调增强
 
 按“前端同步跑时，后端先做可一起测的接口”的流程，本阶段继续补纯后端闭环，不修改 `web/`：
