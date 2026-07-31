@@ -39,11 +39,11 @@
         <div class="app-bar__status">
           <!-- 日期选择器：控件值为 YYYY-MM-DD，调用接口前转成 YYYYMMDD -->
           <input id="disclosure-date" type="date" value="2025-08-21" aria-label="披露日期" />
-          <button id="analyze-disclosure-day">生成披露日汇总</button>
-          <button id="scan-disclosure-day" class="outlined">扫描诊断</button>
-          <button id="stop-disclosure-scan" class="outlined" disabled>停止扫描</button>
-          <button id="export-menu-json" class="outlined">导出 JSON</button>
-          <button id="export-menu-csv" class="outlined">导出 CSV</button>
+          <!-- 单节点双态：空闲「开始扫描」，扫描中原地变「停止扫描」 -->
+          <button id="start-disclosure-scan" data-state="idle">开始扫描</button>
+          <!-- 竖线左侧是产出数据，右侧是分发数据 -->
+          <span class="app-bar__sep" aria-hidden="true"></span>
+          <div id="export-menu-mount"></div>
           <button id="preview-feishu" class="tonal">预览飞书摘要</button>
         </div>
       </header>
@@ -228,6 +228,7 @@
     <span id="snackbar-text"></span>
   </div>
 
+  <script src="/components.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

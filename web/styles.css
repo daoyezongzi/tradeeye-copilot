@@ -309,6 +309,51 @@ body {
   align-items: center;
 }
 
+/* 顶栏分组竖线：左侧「产出数据」，右侧「分发数据」 */
+.app-bar__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: var(--space-1) 0;
+  background: var(--md-sys-color-outline-variant);
+}
+
+.menu {
+  position: relative;
+}
+
+.menu__list {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 10;
+  min-width: 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--shadow-3);
+}
+
+/* 菜单项要无底色、左对齐，且不继承默认按钮的深墨底 */
+.menu__item {
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--md-sys-color-on-surface);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.menu__item:hover {
+  background: var(--md-sys-color-surface-container-high);
+}
+
 .page {
   padding: var(--space-6) var(--space-6) var(--space-7);
   max-width: var(--page-max);

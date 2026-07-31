@@ -83,13 +83,32 @@ def test_scan_progress_reports_elapsed_time(html, js, css):
 
 
 def test_exports_cover_csv_and_json(html, js):
-    assert 'id="export-menu-csv"' in html
-    assert 'id="export-menu-json"' in html
+    # 导出项收进顶栏「导出 ▾」菜单后改由 JS 创建，id 保持不变但不再出现在 HTML 里
+    assert 'id="export-menu-csv"' not in html
+    assert 'id="export-menu-json"' not in html
+    assert 'id="export-menu-mount"' in html
+    assert '<script src="/components.js"></script>' in html
+    assert "export-menu-csv" in js
+    assert "export-menu-json" in js
+    assert "createMenuButton" in js
     assert "exportBundleCsv" in js
     assert "exportBundleJson" in js
     assert "function csvCell(value)" in js
     # CSV 注入/断行需要转义
     assert 'text.replace(/"/g, \'""\')' in js
+
+
+def test_menu_component_is_keyboard_accessible():
+    components = Path("web/components.js").read_text(encoding="utf-8")
+
+    assert "function createMenuButton(" in components
+    assert 'aria-haspopup", "menu"' in components
+    assert 'aria-expanded' in components
+    assert '"Escape"' in components
+    assert '"ArrowDown"' in components
+    assert '"ArrowUp"' in components
+    # 点菜单外部要能关闭
+    assert "wrap.contains(event.target)" in components
 
 
 def test_stable_hash_urls_for_day_and_company(js):
@@ -142,7 +161,15 @@ def test_report_period_is_a_bounded_select(html, js):
 
 
 def test_disclosure_scan_uses_cancellable_job_polling(html, js):
-    assert 'id="stop-disclosure-scan"' in html
+    # 扫描按钮是单节点三态，空闲态不再常驻一个永远灰着的停止按钮
+    assert 'id="start-disclosure-scan"' in html
+    assert 'id="stop-disclosure-scan"' not in html
+    assert 'id="analyze-disclosure-day"' not in html
+    assert 'id="scan-disclosure-day"' not in html
+    # 三处 disabled 重置收敛到一个函数
+    assert "function setScanState(state)" in js
+    assert '"scanning"' in js
+    assert '"cancelling"' in js
     assert "/api/disclosure-day/jobs" in js
     assert "startDisclosureDayJob(date)" in js
     assert "getDisclosureDayJob(jobId)" in js

@@ -29,7 +29,7 @@ const feishuPreviewText = el("feishu-preview-text");
 const feishuPreviewMeta = el("feishu-preview-meta");
 const feishuPreviewHint = el("feishu-preview-hint");
 const sendFeishuButton = el("send-feishu");
-const stopDisclosureScanButton = el("stop-disclosure-scan");
+const scanButton = el("start-disclosure-scan");
 
 const snackbar = el("snackbar");
 const snackbarText = el("snackbar-text");
@@ -253,6 +253,17 @@ function createProgress(progressId, messageId, elapsedId) {
       root.hidden = true;
     },
   };
+}
+
+/* 扫描按钮单节点三态。用两个节点互相 hide 的话，disabled 状态要在多处同步——
+   之前正是漏在这里：两个 catch 分支和 finishDisclosureJob 各自手动重置了一遍。 */
+function setScanState(state) {
+  scanButton.dataset.state = state;
+  const scanning = state === "scanning" || state === "cancelling";
+  scanButton.textContent = scanning ? "停止扫描" : "开始扫描";
+  scanButton.classList.toggle("outlined", scanning);
+  // cancelling 期间禁用，避免重复发取消请求
+  scanButton.disabled = state === "cancelling";
 }
 
 const scanProgress = createProgress("scan-progress", "progress-message", "progress-elapsed");
@@ -956,7 +967,7 @@ function finishDisclosureJob(job) {
   clearInterval(state.jobPollTimer);
   state.jobPollTimer = null;
   state.activeJobId = null;
-  stopDisclosureScanButton.disabled = true;
+  setScanState("idle");
   scanProgress.stop(performance.now() - Number(job.elapsed_seconds || 0) * 1000, job.status === "cancelled" ? `已停止，完成 ${job.processed_count}/${job.total_count}` : `已完成 ${job.processed_count} 家分析`);
   if (job.bundle) {
     state.bundle = job.bundle;
@@ -977,14 +988,14 @@ async function pollDisclosureJob(jobId) {
 
 async function stopDisclosureScan() {
   if (!state.activeJobId) return;
-  stopDisclosureScanButton.disabled = true;
+  setScanState("cancelling");
   const job = await api.cancelDisclosureDayJob(state.activeJobId);
   renderJobProgress(job);
 }
 
 async function loadDisclosureDay(date) {
   scanProgress.start(`正在启动 ${date} 覆盖池扫描…`);
-  stopDisclosureScanButton.disabled = false;
+  setScanState("scanning");
   try {
     const job = await api.startDisclosureDayJob(date);
     state.activeJobId = job.job_id;
@@ -1000,7 +1011,7 @@ async function loadDisclosureDay(date) {
           clearInterval(state.jobPollTimer);
           state.jobPollTimer = null;
           scanProgress.hide();
-          stopDisclosureScanButton.disabled = true;
+          setScanState("idle");
           setStatus({ error: error.message });
           notify(error.message, true);
         });
@@ -1008,7 +1019,7 @@ async function loadDisclosureDay(date) {
     }, 1000);
   } catch (error) {
     scanProgress.hide();
-    stopDisclosureScanButton.disabled = true;
+    setScanState("idle");
     setStatus({ error: error.message });
     notify(error.message, true);
   }
@@ -1124,23 +1135,21 @@ for (const name of VIEWS) {
   el(`tab-${name}`).addEventListener("click", () => navigate(`#/${name}`));
 }
 
-el("analyze-disclosure-day").addEventListener("click", () => {
-  const date = selectedDate();
-  if (!date) {
-    notify("请先选择披露日期", true);
+/* 同一个按钮按当前状态分派：空闲时开扫，扫描中发取消 */
+scanButton.addEventListener("click", () => {
+  if (scanButton.dataset.state === "idle") {
+    const date = selectedDate();
+    if (!date) {
+      notify("请先选择披露日期", true);
+      return;
+    }
+    navigate(`#/day/${date}`);
     return;
   }
-  navigate(`#/day/${date}`);
-});
-
-el("scan-disclosure-day").addEventListener("click", async () => {
-  const date = selectedDate();
-  if (!date) {
-    notify("请先选择披露日期", true);
-    return;
-  }
-  await loadDisclosureDay(date);
-  navigate("#/diagnostics");
+  stopDisclosureScan().catch((error) => {
+    setStatus({ error: error.message });
+    notify(error.message, true);
+  });
 });
 
 el("analyze-company").addEventListener("click", () => {
@@ -1150,12 +1159,6 @@ el("analyze-company").addEventListener("click", () => {
 });
 
 el("preview-feishu").addEventListener("click", previewFeishu);
-stopDisclosureScanButton.addEventListener("click", () => {
-  stopDisclosureScan().catch((error) => {
-    setStatus({ error: error.message });
-    notify(error.message, true);
-  });
-});
 sendFeishuButton.addEventListener("click", confirmSendFeishu);
 el("cancel-feishu").addEventListener("click", () => feishuDialog.close());
 el("close-dialog").addEventListener("click", () => evidenceDialog.close());
@@ -1171,8 +1174,15 @@ el("poll-rss").addEventListener("click", async () => {
   }
 });
 
-el("export-menu-json").addEventListener("click", exportBundleJson);
-el("export-menu-csv").addEventListener("click", exportBundleCsv);
+/* 导出 JSON / CSV 是同类动作，收进一个下拉；id 沿用原值 */
+createMenuButton({
+  mount: el("export-menu-mount"),
+  label: "导出",
+  items: [
+    { id: "export-menu-json", label: "导出 JSON", onSelect: exportBundleJson },
+    { id: "export-menu-csv", label: "导出 CSV", onSelect: exportBundleCsv },
+  ],
+});
 el("export-review-csv").addEventListener("click", exportReviewCsv);
 
 el("clear-review").addEventListener("click", () => {
