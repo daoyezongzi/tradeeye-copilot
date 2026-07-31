@@ -130,6 +130,13 @@ python -m pytest -q --basetemp=.pytest_tmp
   并孤立前一个。`loadDisclosureDay()` 开头加 `state.activeJobId` 早退守卫。
   按钮 `data-state` 不能当锁，它要等异步流程才置位。
 
+终审又抓出一个跨提交才暴露的死锁：上面那个守卫读 `state.activeJobId`，而轮询失败的 catch
+只清了 timer 没清 `activeJobId`。轮询一挂（服务重启、网络抖动），按钮外观回到 `idle`
+但守卫仍拦着，且 timer 已停、`finishDisclosureJob()` 再无触发路径，`activeJobId` 永不清零——
+点「开始扫描」静默无响应，只能刷新页面。已在该 catch 内补清零，并加断言
+`js.count("state.activeJobId = null") == 2` 固化「每条终止路径都清零」这个不变量。
+启动请求失败的外层 catch 不需要清，那条路径上 `activeJobId` 从未被赋值。
+
 验证：
 
 ```bash
