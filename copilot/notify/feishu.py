@@ -73,6 +73,22 @@ def render_formal_disclosure_text(summary: DailySummary, scan: DisclosureScanRes
     return "\n".join(lines)
 
 
+def split_feishu_text(text: str, max_chars: int = 3500) -> list[str]:
+    if len(text) <= max_chars:
+        return [text]
+    chunks: list[list[str]] = [[]]
+    current_len = 0
+    for line in text.splitlines():
+        line_len = len(line) + 1
+        if chunks[-1] and current_len + line_len > max_chars - 12:
+            chunks.append([])
+            current_len = 0
+        chunks[-1].append(line)
+        current_len += line_len
+    total = len(chunks)
+    return [f"[{index}/{total}]\n" + "\n".join(lines) for index, lines in enumerate(chunks, start=1)]
+
+
 class FeishuNotifier:
     def __init__(self, webhook_url: str, http_client: httpx.Client | None = None):
         self.webhook_url = webhook_url
@@ -87,3 +103,6 @@ class FeishuNotifier:
             return False
         data = response.json()
         return data.get("StatusCode", data.get("code", 0)) == 0
+
+    def send_text_parts(self, parts: list[str]) -> bool:
+        return all(self.send_text(part) for part in parts)
