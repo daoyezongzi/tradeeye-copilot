@@ -2,6 +2,61 @@
 
 ## 2026-07-31
 
+### 前端产品化 spec 分解
+
+把前端 8 项待办按「改动是否耦合」和「是否卡后端接口」拆成四个 spec，逐个走 spec → plan → 实施，
+不合成一个大 spec。
+
+| Spec | 主题 | 覆盖待办 | 依赖 | 状态 |
+| --- | --- | --- | --- | --- |
+| 1 | 扫描入口与信息架构收口 | 合并扫描入口、弱化扫描诊断、整理高级入口、清理遗留 wrapper | 无 | spec 已提交 `a8ecf65` |
+| 2 | job 恢复与 history | 补 job 恢复 UI | 需新增 job 列表接口 | 未开始 |
+| 3 | 复核状态后端化 | 复核状态后端化、后端导出接口 | 需新增持久层与路由 | 未开始 |
+| 4 | 飞书卡片化 | 飞书 interactive card + callback | 需新增卡片渲染与 callback 路由 | 未开始 |
+
+分组理由：
+
+- Spec 1 的四项共享同一套侧栏与顶栏 DOM，拆开做会互相返工。wrapper 清理也归此处，因为
+  `analyzeDisclosureDay()` / `scanDisclosureDay()` 恰好是在入口合并后才真正失去主流程用途。
+- Spec 3 把复核状态迁后端与后端导出接口放一起：两者都是「前端内存状态挪到后端持久层 + 补 API」，
+  数据模型与路由风格需互相参照，分开做容易出两套不一致的约定。
+- 执行顺序 1 → 2 →（3、4 可并行）。
+
+读码核实的两个前提（写进 Spec 1）：
+
+- 「生成披露日汇总」与「扫描诊断」调用的是同一条链路，都走 `loadDisclosureDay()` → 同一 job →
+  同一份 bundle，唯一差别是最终落在哪个视图。合并入口不改变扫描行为。
+- `api.analyzeDisclosureDay` / `api.scanDisclosureDay` / `api.disclosureDayBundle` 三个 wrapper
+  在 `web/app.js` 中已无任何调用点，主流程早已走 job 三件套。但 `tests/test_frontend_contracts.py`
+  与 `tests/test_frontend_diagnostics.py` 靠断言这些字符串存在来验证「前端接了真实接口」，
+  删 wrapper 必须同步改测试。
+
+Spec 1 的设计决策：侧栏 4 tab 降 3 tab；扫描诊断与开发者工具各成一个独立折叠区（语义分开——
+诊断回答业务问题「这家为何没出卡」，开发者区是系统内部状态）；顶栏降为四个常驻控件
+（日期 / 开始扫描 │ 导出 ▾ / 预览飞书摘要），停止扫描改为扫描期间原地替换而非常驻 disabled 按钮；
+折叠区用 `index.html` 里的静态 `<details>` 包住现有容器，因此所有 render 函数体一行不动；
+`#/diagnostics` 保留为深链接但扫描完不自动展开。
+
+### 待办：续扫能力
+
+当前「停止扫描」只有停止语义，没有继续语义。核实结果：
+
+- grep `copilot/` 全目录的 `pause|resume|cursor|paused|continue_from|skip_existing` 零命中。
+- `analyze_disclosure_day_bundle()`（`copilot/service/analyzer.py:104`）每次从
+  `calendar.fetch_events()` 拿全量事件从头遍历，无起始偏移参数。
+- 取消走 `break` 出循环，用已完成的 `results` 出 partial bundle。
+- job 状态机只有 `running / completed / cancelled / failed`，无 `paused`。
+
+因此停止后再次扫描是整轮重跑，已抓过的公司会重复请求 Tushare，而当前 UI 完全没有表达这一点。
+
+一个比完整 cursor 机制便宜的路子：`mark_cancelled()` 已把 partial bundle 落进 SQLite，其中含
+已完成公司的 `ts_code`。续扫可以是「读上一个 cancelled job 的 bundle → 取已完成名单 →
+新 job 跳过这些公司 → 结果合并」，后端只需加 `skip_ts_codes` 或 `resume_from_job_id` 参数，
+不必做游标持久化。
+
+本轮不做。待后端 resume 就绪后前后端一并改动。Spec 1 中按钮文案保持「开始扫描」不变，
+避免现在改文案、后端完成后又改回。
+
 ### 阶段归档：后端披露扫描收口与前端待办盘点
 
 本轮主要解决后端可观测、可停止、可恢复的披露日扫描问题，并对前端剩余产品化工作做了一轮盘点。
