@@ -1,5 +1,76 @@
 # TradeEye Copilot 开发日志
 
+## 2026-07-31
+
+### P2 前端产品化已完成
+
+新增后端支撑接口：
+
+```http
+GET  /api/meta
+POST /api/disclosure-day/bundle
+POST /api/notify/feishu/disclosure-day/{date}/preview
+```
+
+- `/api/meta`：覆盖池数量、`company_names`、`tushare_ready`、`feishu_ready`。只返回布尔就绪位，不返回 token / webhook 值。
+- `/api/disclosure-day/bundle`：一次调用同时返回 `summary` 与 `scan`，前端不再为了拿诊断而二次扫描。
+- `/preview`：渲染正式飞书摘要但不发送，返回 `text` / `sendable` / `reason`，供发送前确认。
+
+`dev_app` demo 数据由 1 家扩为 6 家，覆盖红 2 / 黄 2 / 未见异常 1 / 数据问题 1，使分组视图和飞书摘要可在本地预览。
+
+P2 清单实现情况：
+
+| 项 | 实现 |
+| --- | --- |
+| 正式摘要预览 + 发送确认 | 预览弹窗展示全文与字符/行数；`sendable=false` 时禁用确认按钮；发送只能经确认触发 |
+| 红/黄/数据问题分组视图 | 按 severity 分组渲染，数据问题以诊断表呈现；chips 可筛选 |
+| 公司名称展示 | 公司卡、诊断表、复核表、飞书摘要统一走 `company_names` |
+| 扫描进度与耗时提示 | M3 indeterminate 进度条 + 实时已用时；完成后显示总耗时 |
+| 导出 CSV/JSON | 披露日 bundle 导出 JSON 与合并 CSV；复核单独导出 |
+| 稳定 URL | `#/day/{date}`、`#/company/{ts_code}/{period}`，支持 hashchange 与直接打开 |
+| 复核状态 UI | 公司卡上标注有效/误报，localStorage 持久化，导出列与 `eval/manual_review_template.csv` 对齐 |
+| 信息架构与视觉 | 工作台 / 公司 / 复核 / 诊断 四视图 + 半透明顶栏 |
+
+### 前端设计基线
+
+颜色角色沿用 Material Design 3 的 `--md-sys-color-*` 命名（surface-container 层级、on-* 前景、outline-variant 描边）；字体栈、8pt 栅格与「功能层半透明、内容层不透明」的分层规则取自 Apple HIG materials 指南。进度条按 M3 规定在时长未知时用 indeterminate 动画，不伪造百分比，并遵守 `prefers-reduced-motion`。明暗双色通过 `prefers-color-scheme` 切换。
+
+### 前端验证方式
+
+除 pytest 契约测试外，用 jsdom 与 Playwright 真实渲染 demo 服务验证：
+
+```text
+控制台错误：0（明色 / 暗色）
+分组：🔴 2 / 🟡 2 / ⚪ 1 / ⚠️ 1
+公司名称：石大胜华、航天机电、浙江新能、哈森股份、金鹰股份
+飞书预览：495 字符 25 行，webhook 未配置时确认按钮禁用
+依据溯源弹窗：59ms 内打开并渲染 Evidence
+复核标注：写入 localStorage，精确率指标同步
+导出：tradeeye-20250821.csv / .json / manual_review.csv
+诊断表：6 行，message 经 escapeHtml，无原始 script 标签
+窄屏 430px：单列，无横向溢出
+```
+
+截图存于 `artifacts/ui-preview/`（该目录已被 `.gitignore` 忽略）。
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+129 passed
+```
+
+### 本轮未做
+
+- 飞书交互卡片 / 按钮 callback：预览与发送确认仍在 Web 端，飞书侧仍是静态文本。
+- 复核标注仅存浏览器 localStorage，未落库、未回流 `eval/` 精确率链路。
+- 稳定 URL 是前端 hash 路由，不是可分享的服务端渲染详情页。
+- 前端未做真实 Tushare 大覆盖池压测；进度条为 indeterminate，因为后端未提供逐家进度事件。
+- 导出为前端内存数据导出，未提供后端导出接口。
+
 ## 2026-07-30
 
 ### Real Data Disclosure Event 已完成
