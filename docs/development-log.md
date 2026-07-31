@@ -2,6 +2,36 @@
 
 ## 2026-07-31
 
+### 阶段归档：可停止披露扫描闭环
+
+本阶段围绕“大覆盖池扫描时要实时知道 Tushare 抓到哪，并能中途停止”完成闭环：
+
+- 扫描入口从长请求改为 job 流程，前端拿 `job_id` 后轮询进度。
+- 后端记录当前公司、报告期、Tushare 表级阶段、已处理家数、OK / 数据问题数量、耗时和日志。
+- Tushare 拉表阶段已细化到 `fetch_income / fetch_balancesheet / fetch_cashflow / fetch_indicator`。
+- 前端新增「停止扫描」按钮；取消在公司之间和表之间的安全点生效，已完成结果继续保留。
+- job 状态已落 SQLite `disclosure_jobs`，服务重启后可恢复状态、取消标记和最终 partial/full bundle。
+- 本阶段对应提交：`55d45ef`、`789946a`、`ab34f9b`、`64be51b`。
+
+当前边界：
+
+- 已发出的单次 Tushare HTTP 请求不能硬中断，只能等该表请求返回后停。
+- 前端仍是 1 秒轮询，未升级 SSE / WebSocket。
+- job 暂无多用户隔离、权限控制和旧记录清理策略。
+- 后台执行仍用 FastAPI `BackgroundTasks`，尚未引入生产级队列。
+
+验证：
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+144 passed
+```
+
 ### 披露日扫描 job SQLite 持久化
 
 在实时进度与停止能力之上，把 job 状态从纯内存升级为 SQLite 持久化：
