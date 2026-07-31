@@ -163,10 +163,10 @@ python -m pytest -q --basetemp=.pytest_tmp
 
 | Spec | 主题 | 覆盖待办 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
-| 1 | 扫描入口与信息架构收口 | 合并扫描入口、弱化扫描诊断、整理高级入口、清理遗留 wrapper | 无 | spec 已提交 `a8ecf65` |
-| 2 | job 恢复与 history | 补 job 恢复 UI | 需新增 job 列表接口 | 未开始 |
-| 3 | 复核状态后端化 | 复核状态后端化、后端导出接口 | 需新增持久层与路由 | 未开始 |
-| 4 | 飞书卡片化 | 飞书 interactive card + callback | 需新增卡片渲染与 callback 路由 | 未开始 |
+| 1 | 扫描入口与信息架构收口 | 合并扫描入口、弱化扫描诊断、整理高级入口、清理遗留 wrapper | 无 | **已落地**（见上文 Spec 1 归档） |
+| 2 | job 恢复与 history | 补 job 恢复 UI | job 列表接口 | 后端已就绪，前端未开始，无 spec/plan |
+| 3 | 复核状态后端化 | 复核状态后端化、后端导出接口 | 持久层与路由 | 后端已就绪，前端未开始，无 spec/plan |
+| 4 | 飞书卡片化 | 飞书 interactive card + callback | 卡片渲染与 callback 路由 | callback 侧已就绪，卡片渲染未做，前端未开始，无 spec/plan |
 
 分组理由：
 
@@ -175,6 +175,28 @@ python -m pytest -q --basetemp=.pytest_tmp
 - Spec 3 把复核状态迁后端与后端导出接口放一起：两者都是「前端内存状态挪到后端持久层 + 补 API」，
   数据模型与路由风格需互相参照，分开做容易出两套不一致的约定。
 - 执行顺序 1 → 2 →（3、4 可并行）。
+
+### 前端剩余待办盘点（Spec 1 落地后）
+
+Spec 1 完成时的接口就绪情况——后端在前端做 Spec 1 期间并行推进，Spec 2/3/4 的前置接口
+基本都已落地，但**前端一个都还没接**。三者都要改 UI，且都还没有 spec 与 plan
+（`docs/superpowers/specs/` 与 `plans/` 下只有 Spec 1 的文件）。
+
+| Spec | 后端接口 | 前端现状 | UI 改动量 |
+| --- | --- | --- | --- |
+| 2 | `GET /api/disclosure-day/jobs`、`list_recent()` 已就绪 | 零调用，刷新即丢 job | 中：需 job 历史入口 + 恢复逻辑 |
+| 3 | `POST/GET /api/reviews/labels`、`GET /api/reviews/labels.csv` 已就绪 | 复核仍走 localStorage（`web/app.js:779`、`:786`），导出仍是前端内存生成 | 小到中：复核队列改走接口，导出项改指后端 URL |
+| 4 | callback、verification token、`PUBLIC_BASE_URL`、通知日志、发送幂等均已就绪 | 仍是文本预览/发送 | 小：预览展示卡片结构 |
+
+开工前需先定的两点：
+
+- **Spec 3 的数据迁移**：用户 `localStorage` 里已有的复核标注，切后端后是迁移还是丢弃。
+  这是三个 spec 里唯一有数据迁移风险的。
+- **Spec 4 的分工**：`copilot/notify/feishu.py` 至今仍在拼纯文本，interactive card 渲染没做。
+  那是后端文件，按既有分工应由后端做，前端只改预览呈现——开工前要和后端确认谁做卡片渲染。
+
+另有一项跨 spec 的待办仍未解决：停止扫描后再次扫描是整轮重跑，已抓过的公司会重复请求
+Tushare（详见下文「待办：续扫能力」）。Spec 1 明确把它列为已知限制，未在前端做任何规避。
 
 读码核实的两个前提（写进 Spec 1）：
 
