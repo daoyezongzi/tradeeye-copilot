@@ -8,7 +8,7 @@ from copilot.models import Evidence
 from copilot.report.builder import CompanyCard, DailySummary, QuarterlyReview
 from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult
-from copilot.service.disclosure_scan import DisclosureScanResult
+from copilot.service.disclosure_scan import DisclosureAnalysisBundle, DisclosureScanResult
 
 
 class AnalyzeCompanyRequest(BaseModel):
@@ -25,6 +25,20 @@ class NotifyResult(BaseModel):
     reason: str
 
 
+class AppMeta(BaseModel):
+    coverage_count: int
+    company_names: dict[str, str]
+    tushare_ready: bool
+    feishu_ready: bool
+
+
+class FeishuPreview(BaseModel):
+    date: str
+    text: str
+    sendable: bool
+    reason: str
+
+
 class ReportService(Protocol):
     def get_company_card(self, ts_code: str, period: str) -> CompanyCard | None: ...
 
@@ -34,13 +48,19 @@ class ReportService(Protocol):
 
     def get_quarterly_review(self) -> QuarterlyReview | None: ...
 
+    def get_meta(self) -> AppMeta: ...
+
     def analyze_company(self, ts_code: str, period: str) -> CompanyAnalysisResult: ...
 
     def analyze_disclosure_day(self, date: str) -> DailySummary: ...
 
     def scan_disclosure_day(self, date: str) -> DisclosureScanResult: ...
 
+    def analyze_disclosure_day_bundle(self, date: str) -> DisclosureAnalysisBundle: ...
+
     def poll_rss(self) -> RssPollResult: ...
+
+    def preview_feishu_disclosure_day(self, date: str) -> FeishuPreview: ...
 
     def notify_feishu_disclosure_day(self, date: str) -> NotifyResult: ...
 
@@ -73,6 +93,10 @@ def create_app(report_service: ReportService) -> FastAPI:
             raise HTTPException(status_code=404, detail="quarterly review not found")
         return review
 
+    @app.get("/api/meta", response_model=AppMeta)
+    def app_meta():
+        return report_service.get_meta()
+
     @app.post("/api/analyze/company", response_model=CompanyAnalysisResult)
     def analyze_company(request: AnalyzeCompanyRequest):
         return report_service.analyze_company(request.ts_code, request.period)
@@ -85,9 +109,17 @@ def create_app(report_service: ReportService) -> FastAPI:
     def scan_disclosure_day(request: AnalyzeDisclosureDayRequest):
         return report_service.scan_disclosure_day(request.date)
 
+    @app.post("/api/disclosure-day/bundle", response_model=DisclosureAnalysisBundle)
+    def disclosure_day_bundle(request: AnalyzeDisclosureDayRequest):
+        return report_service.analyze_disclosure_day_bundle(request.date)
+
     @app.post("/api/rss/poll", response_model=RssPollResult)
     def poll_rss():
         return report_service.poll_rss()
+
+    @app.post("/api/notify/feishu/disclosure-day/{date}/preview", response_model=FeishuPreview)
+    def preview_feishu_disclosure_day(date: str):
+        return report_service.preview_feishu_disclosure_day(date)
 
     @app.post("/api/notify/feishu/disclosure-day/{date}", response_model=NotifyResult)
     def notify_feishu_disclosure_day(date: str):
