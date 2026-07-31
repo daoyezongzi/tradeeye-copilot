@@ -78,3 +78,27 @@ def build_analysis_bundle(date: str, coverage_count: int, results) -> Disclosure
     scan = build_scan_result(date=date, coverage_count=coverage_count, events=events)
     summary = build_daily_summary(date=date, coverage_count=coverage_count, cards=cards, disclosed_count=len(results))
     return DisclosureAnalysisBundle(date=date, summary=summary, scan=scan)
+
+
+def merge_analysis_bundles(base: DisclosureAnalysisBundle | None, current: DisclosureAnalysisBundle) -> DisclosureAnalysisBundle:
+    if base is None:
+        return current
+
+    events_by_key = {(event.ts_code, event.period): event for event in base.scan.events}
+    for event in current.scan.events:
+        events_by_key[(event.ts_code, event.period)] = event
+
+    cards_by_key = {(card.ts_code, card.period): card for card in base.summary.cards}
+    for card in current.summary.cards:
+        cards_by_key[(card.ts_code, card.period)] = card
+
+    coverage_count = max(base.scan.coverage_count, current.scan.coverage_count)
+    events = list(events_by_key.values())
+    scan = build_scan_result(date=current.date, coverage_count=coverage_count, events=events)
+    summary = build_daily_summary(
+        date=current.date,
+        coverage_count=coverage_count,
+        cards=list(cards_by_key.values()),
+        disclosed_count=len(events),
+    )
+    return DisclosureAnalysisBundle(date=current.date, summary=summary, scan=scan)

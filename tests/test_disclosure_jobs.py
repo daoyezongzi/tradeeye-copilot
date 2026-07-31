@@ -61,3 +61,46 @@ def test_disclosure_job_store_marks_completed_with_bundle():
     assert completed.ok_count == 1
     assert completed.data_problem_count == 0
     assert completed.bundle.summary.red_count == 1
+
+def test_disclosure_job_store_blocks_cross_owner_resume_source():
+    store = DisclosureJobStore(company_names={})
+    source = store.start("20250825", owner_id="alice")
+
+    try:
+        store.start("20250825", resume_from_job_id=source.job_id, owner_id="bob")
+    except PermissionError as exc:
+        assert source.job_id in str(exc)
+    else:
+        raise AssertionError("expected PermissionError")
+
+
+def test_disclosure_job_store_filters_by_owner_and_blocks_cross_owner_get():
+    store = DisclosureJobStore(company_names={})
+    alice = store.start("20250825", owner_id="alice")
+    bob = store.start("20250825", owner_id="bob")
+
+    assert [job.job_id for job in store.list_recent(limit=10, owner_id="alice")] == [alice.job_id]
+    assert [job.job_id for job in store.list_recent(limit=10, owner_id="bob")] == [bob.job_id]
+
+    try:
+        store.get(alice.job_id, owner_id="bob")
+    except PermissionError as exc:
+        assert alice.job_id in str(exc)
+    else:
+        raise AssertionError("expected PermissionError")
+
+
+
+def test_disclosure_job_store_prunes_old_finished_jobs():
+    store = DisclosureJobStore(company_names={})
+    oldest = store.start("20250823")
+    middle = store.start("20250824")
+    newest = store.start("20250825")
+    store.mark_completed(oldest.job_id, _bundle("20250823"))
+    store.mark_completed(middle.job_id, _bundle("20250824"))
+    store.mark_completed(newest.job_id, _bundle("20250825"))
+
+    removed = store.prune_finished(keep_recent=2)
+
+    assert removed == 1
+    assert [job.job_id for job in store.list_recent(limit=5)] == [newest.job_id, middle.job_id]

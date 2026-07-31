@@ -16,6 +16,8 @@ class DisclosureJobStatus(BaseModel):
     total_count: int = 0
     ok_count: int = 0
     data_problem_count: int = 0
+    owner_id: str | None = None
+    resume_from_job_id: str | None = None
     current_ts_code: str | None = None
     current_name: str | None = None
     current_period: str | None = None
@@ -33,19 +35,25 @@ class DisclosureJobStore:
         self._cancel_requested: set[str] = set()
         self._active_job_id: str | None = None
 
-    def start(self, date: str) -> DisclosureJobStatus:
+    def start(self, date: str, resume_from_job_id: str | None = None, owner_id: str | None = None) -> DisclosureJobStatus:
+        if resume_from_job_id is not None:
+            self.get(resume_from_job_id, owner_id=owner_id)
         job_id = uuid4().hex
-        status = DisclosureJobStatus(job_id=job_id, date=date, status="running")
+        status = DisclosureJobStatus(job_id=job_id, date=date, status="running", owner_id=owner_id, resume_from_job_id=resume_from_job_id)
         self._jobs[job_id] = status
         self._started_at[job_id] = time()
         return status
 
-    def list_recent(self, limit: int = 20) -> list[DisclosureJobStatus]:
+    def list_recent(self, limit: int = 20, owner_id: str | None = None) -> list[DisclosureJobStatus]:
         jobs = sorted(self._jobs.values(), key=lambda job: self._started_at[job.job_id], reverse=True)
-        return [self.get(job.job_id) for job in jobs[:limit]]
+        if owner_id is not None:
+            jobs = [job for job in jobs if job.owner_id == owner_id]
+        return [self.get(job.job_id, owner_id=owner_id) for job in jobs[:limit]]
 
-    def get(self, job_id: str) -> DisclosureJobStatus:
+    def get(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus:
         status = self._jobs[job_id]
+        if owner_id is not None and status.owner_id != owner_id:
+            raise PermissionError(f"job {job_id} is not visible to owner {owner_id}")
         status.elapsed_seconds = round(time() - self._started_at[job_id], 1)
         return status
 
@@ -86,16 +94,30 @@ class DisclosureJobStore:
         status.logs.append(self._format_log(event))
         return self.get(job_id)
 
-    def request_cancel(self, job_id: str) -> DisclosureJobStatus:
+    def request_cancel(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus:
+        status = self.get(job_id, owner_id=owner_id)
         self._cancel_requested.add(job_id)
-        status = self._jobs[job_id]
         if status.status == "running":
             status.current_stage = "cancel_requested"
             status.logs.append("cancel requested")
-        return self.get(job_id)
+        return self.get(job_id, owner_id=owner_id)
 
     def should_cancel(self, job_id: str) -> bool:
         return job_id in self._cancel_requested
+
+    def prune_finished(self, keep_recent: int = 20) -> int:
+        finished = [
+            job
+            for job in self._jobs.values()
+            if job.status in {"completed", "cancelled", "failed"}
+        ]
+        finished.sort(key=lambda job: self._started_at[job.job_id], reverse=True)
+        to_remove = finished[keep_recent:]
+        for job in to_remove:
+            self._jobs.pop(job.job_id, None)
+            self._started_at.pop(job.job_id, None)
+            self._cancel_requested.discard(job.job_id)
+        return len(to_remove)
 
     def mark_completed(self, job_id: str, bundle: DisclosureAnalysisBundle) -> DisclosureJobStatus:
         status = self._jobs[job_id]
@@ -165,32 +187,41 @@ class SQLiteDisclosureJobStore(DisclosureJobStore):
                 """
             )
 
-    def start(self, date: str) -> DisclosureJobStatus:
-        status = super().start(date)
+    def start(self, date: str, resume_from_job_id: str | None = None, owner_id: str | None = None) -> DisclosureJobStatus:
+        status = super().start(date, resume_from_job_id=resume_from_job_id, owner_id=owner_id)
         self._persist(status)
         return status
 
-    def get(self, job_id: str) -> DisclosureJobStatus:
+    def get(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus:
         if job_id not in self._jobs:
             self._load(job_id)
-        return super().get(job_id)
+        return super().get(job_id, owner_id=owner_id)
 
-    def list_recent(self, limit: int = 20) -> list[DisclosureJobStatus]:
+    def list_recent(self, limit: int = 20, owner_id: str | None = None) -> list[DisclosureJobStatus]:
         self.init_schema()
+        query = "SELECT job_id FROM disclosure_jobs ORDER BY started_at DESC"
+        params = ()
+        if owner_id is None:
+            query += " LIMIT ?"
+            params = (limit,)
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT job_id FROM disclosure_jobs ORDER BY started_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-        return [self.get(row["job_id"]) for row in rows]
+            rows = conn.execute(query, params).fetchall()
+        jobs = []
+        for row in rows:
+            job = self.get(row["job_id"])
+            if owner_id is None or job.owner_id == owner_id:
+                jobs.append(self.get(row["job_id"], owner_id=owner_id))
+            if len(jobs) >= limit:
+                break
+        return jobs
 
     def apply_progress(self, job_id: str, event: DisclosureProgressEvent | None = None, **values) -> DisclosureJobStatus:
         status = super().apply_progress(job_id, event, **values)
         self._persist(status)
         return status
 
-    def request_cancel(self, job_id: str) -> DisclosureJobStatus:
-        status = super().request_cancel(job_id)
+    def request_cancel(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus:
+        status = super().request_cancel(job_id, owner_id=owner_id)
         self._persist(status)
         return status
 
@@ -208,6 +239,25 @@ class SQLiteDisclosureJobStore(DisclosureJobStore):
         status = super().mark_failed(job_id, message)
         self._persist(status)
         return status
+
+    def prune_finished(self, keep_recent: int = 20) -> int:
+        self.init_schema()
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT job_id FROM disclosure_jobs
+                WHERE status IN ('completed', 'cancelled', 'failed')
+                ORDER BY started_at DESC
+                """
+            ).fetchall()
+            to_remove = [row["job_id"] for row in rows[keep_recent:]]
+            if to_remove:
+                conn.executemany("DELETE FROM disclosure_jobs WHERE job_id = ?", [(job_id,) for job_id in to_remove])
+        for job_id in to_remove:
+            self._jobs.pop(job_id, None)
+            self._started_at.pop(job_id, None)
+            self._cancel_requested.discard(job_id)
+        return len(to_remove)
 
     def _persist(self, status: DisclosureJobStatus) -> None:
         self.init_schema()

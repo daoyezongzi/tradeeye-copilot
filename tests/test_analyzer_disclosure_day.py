@@ -108,3 +108,26 @@ def test_analyze_disclosure_day_preserves_disclosed_count_when_one_company_not_r
 
     assert summary.disclosed_count == 2
     assert [card.ts_code for card in summary.cards] == ["000001.SZ"]
+
+
+def test_analyze_disclosure_day_skips_completed_codes_when_resuming():
+    class CountingFundamentals(FakeFundamentals):
+        def __init__(self):
+            self.requested = []
+
+        def fetch_snapshot(self, ts_code, period):
+            self.requested.append((ts_code, period))
+            return super().fetch_snapshot(ts_code, period)
+
+    fundamentals = CountingFundamentals()
+    service = AnalyzerService(
+        fundamentals=fundamentals,
+        store=FakeStore(),
+        coverage_pool=["000001.SZ", "600000.SH"],
+        calendar=FakeCalendar(),
+    )
+
+    bundle = service.analyze_disclosure_day_bundle("20250821", skip_ts_codes={"000001.SZ"})
+
+    assert [event.ts_code for event in bundle.scan.events] == ["600000.SH"]
+    assert {ts_code for ts_code, _ in fundamentals.requested} == {"600000.SH"}

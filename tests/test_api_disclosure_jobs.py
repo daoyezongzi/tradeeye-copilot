@@ -10,8 +10,14 @@ from copilot.service.disclosure_scan import CompanyAnalysisStatus, DisclosureAna
 class FakeJobService:
     def __init__(self):
         self.started_dates = []
+        self.start_resume_from = []
         self.cancelled_jobs = []
         self.ran_background_jobs = []
+        self.prune_requests = []
+        self.start_owner_ids = []
+        self.list_owner_ids = []
+        self.get_owner_ids = []
+        self.cancel_owner_ids = []
 
     def get_company_card(self, ts_code, period):
         return None
@@ -49,8 +55,10 @@ class FakeJobService:
     def notify_feishu_disclosure_day(self, date):
         return NotifyResult(sent=False, reason="webhook_not_configured")
 
-    def start_disclosure_day_job(self, date):
+    def start_disclosure_day_job(self, date, resume_from_job_id=None, owner_id=None):
         self.started_dates.append(date)
+        self.start_resume_from.append(resume_from_job_id)
+        self.start_owner_ids.append(owner_id)
         return {
             "job_id": "job-1",
             "date": date,
@@ -71,7 +79,8 @@ class FakeJobService:
     def run_disclosure_day_job(self, job_id):
         self.ran_background_jobs.append(job_id)
 
-    def list_disclosure_day_jobs(self, limit=20):
+    def list_disclosure_day_jobs(self, limit=20, owner_id=None):
+        self.list_owner_ids.append(owner_id)
         assert limit == 2
         return [
             {
@@ -90,10 +99,11 @@ class FakeJobService:
                 "logs": [],
                 "bundle": None,
             },
-            self.get_disclosure_day_job("job-1"),
+            self.get_disclosure_day_job("job-1", owner_id=owner_id),
         ]
 
-    def get_disclosure_day_job(self, job_id):
+    def get_disclosure_day_job(self, job_id, owner_id=None):
+        self.get_owner_ids.append(owner_id)
         assert job_id == "job-1"
         return {
             "job_id": job_id,
@@ -112,7 +122,8 @@ class FakeJobService:
             "bundle": None,
         }
 
-    def cancel_disclosure_day_job(self, job_id):
+    def cancel_disclosure_day_job(self, job_id, owner_id=None):
+        self.cancel_owner_ids.append(owner_id)
         self.cancelled_jobs.append(job_id)
         return {
             "job_id": job_id,
@@ -131,6 +142,10 @@ class FakeJobService:
             "bundle": None,
         }
 
+    def prune_disclosure_day_jobs(self, keep_recent=20):
+        self.prune_requests.append(keep_recent)
+        return 3
+
 
 def test_disclosure_day_job_routes_start_poll_and_cancel():
     service = FakeJobService()
@@ -141,6 +156,7 @@ def test_disclosure_day_job_routes_start_poll_and_cancel():
     assert started.json()["job_id"] == "job-1"
     assert started.json()["status"] == "running"
     assert service.started_dates == ["20250825"]
+    assert service.start_resume_from == [None]
     assert service.ran_background_jobs == ["job-1"]
 
     progress = client.get("/api/disclosure-day/jobs/job-1")
@@ -162,3 +178,44 @@ def test_disclosure_day_job_routes_list_recent_jobs():
 
     assert response.status_code == 200
     assert [job["job_id"] for job in response.json()] == ["job-2", "job-1"]
+
+
+def test_disclosure_day_job_route_accepts_resume_source():
+    service = FakeJobService()
+    client = TestClient(create_app(service))
+
+    response = client.post("/api/disclosure-day/jobs", json={"date": "20250825", "resume_from_job_id": "job-cancelled"})
+
+    assert response.status_code == 200
+    assert service.start_resume_from == ["job-cancelled"]
+
+
+def test_disclosure_day_job_route_prunes_finished_jobs():
+    service = FakeJobService()
+    client = TestClient(create_app(service))
+
+    response = client.delete("/api/disclosure-day/jobs?keep_recent=7")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 3}
+    assert service.prune_requests == [7]
+
+
+def test_disclosure_day_job_routes_pass_owner_header_to_service():
+    service = FakeJobService()
+    client = TestClient(create_app(service))
+    headers = {"X-TradeEye-Owner": "alice"}
+
+    started = client.post("/api/disclosure-day/jobs", json={"date": "20250825"}, headers=headers)
+    listed = client.get("/api/disclosure-day/jobs?limit=2", headers=headers)
+    progress = client.get("/api/disclosure-day/jobs/job-1", headers=headers)
+    cancelled = client.post("/api/disclosure-day/jobs/job-1/cancel", headers=headers)
+
+    assert started.status_code == 200
+    assert listed.status_code == 200
+    assert progress.status_code == 200
+    assert cancelled.status_code == 200
+    assert service.start_owner_ids == ["alice"]
+    assert service.list_owner_ids == ["alice"]
+    assert service.get_owner_ids == ["alice", "alice"]
+    assert service.cancel_owner_ids == ["alice"]

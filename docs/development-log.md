@@ -2,6 +2,38 @@
 
 ## 2026-07-31
 
+### 阶段归档：披露扫描续扫与运行维护增强
+
+本阶段完成 #51 的可恢复扫描闭环，并补上运行维护边界：
+
+- `POST /api/disclosure-day/jobs` 支持 `resume_from_job_id`；新 job 会读取来源 job 的 partial/full bundle，跳过已完成公司，只分析剩余披露事件。
+- `AnalyzerService.analyze_disclosure_day_bundle()` 支持 `skip_ts_codes`，避免取消后续扫重复请求 Tushare。
+- 新增 `merge_analysis_bundles()`，把来源 partial bundle 与续扫结果合并后再缓存、展示和持久化。
+- job 状态新增 `owner_id` / `resume_from_job_id`；内存与 SQLite store 都支持 owner 过滤，并阻止跨 owner 读取或续扫来源 job。
+- 新增 `DELETE /api/disclosure-day/jobs?keep_recent=N`，按最近完成/取消/失败记录保留 N 条，清理旧 job 历史。
+- 前端扫描历史增加「续扫」提示与「清理旧记录」按钮；续扫通过 `resume_from_job_id` 走同一套 job polling。
+
+自审结论：
+
+- 续扫沿用现有安全停止语义，不实现强杀 HTTP 请求，也不引入完整 cursor 状态机；当前粒度是“已完成公司级别”。
+- owner 隔离为 header 级轻量边界：`X-TradeEye-Owner` 存入 job 状态，并用于列表、读取、取消和续扫来源校验；未配置真实登录体系时不扩大为鉴权系统。
+- SSE / WebSocket 仍未引入；前端保持 1 秒轮询，原因是当前瓶颈仍是长耗时 Tushare 拉取，轮询已满足可观察与恢复。
+- `diff --check` 干净。
+
+验证：
+
+```bash
+python -m pytest tests/test_analyzer_disclosure_day.py tests/test_api_disclosure_jobs.py tests/test_real_app_jobs.py tests/test_disclosure_jobs.py tests/test_disclosure_job_sqlite.py tests/test_frontend_productization.py -q --basetemp=.pytest_tmp
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+38 passed
+183 passed
+```
+
 ### 阶段归档：正式覆盖池配置 gate 与 Tushare 规则样本复测
 
 本阶段完成 #50 的可验证部分：正式覆盖池配置质量 gate、RSS 名称同步，以及按 Tushare 实测结果决定是否新增行业规则。

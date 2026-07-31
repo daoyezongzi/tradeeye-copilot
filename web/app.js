@@ -145,11 +145,12 @@ const api = {
     });
   },
 
-  async startDisclosureDayJob(date) {
+  async startDisclosureDayJob(date, resumeFromJobId = null) {
+    const payload = resumeFromJobId ? { date, resume_from_job_id: resumeFromJobId } : { date };
     return requestJson("/api/disclosure-day/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date }),
+      body: JSON.stringify(payload),
     });
   },
 
@@ -163,6 +164,10 @@ const api = {
 
   async cancelDisclosureDayJob(jobId) {
     return requestJson(`/api/disclosure-day/jobs/${jobId}/cancel`, { method: "POST" });
+  },
+
+  async pruneDisclosureDayJobs(keepRecent = 20) {
+    return requestJson(`/api/disclosure-day/jobs?keep_recent=${keepRecent}`, { method: "DELETE" });
   },
 
   async previewFeishuDisclosureDay(date) {
@@ -994,16 +999,35 @@ function renderJobHistory(jobs) {
   const list = document.createElement("div");
   list.className = "history-list";
   for (const job of jobs) {
-    const row = document.createElement("button");
-    row.type = "button";
+    const row = document.createElement("div");
     row.className = "history-row";
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
     row.addEventListener("click", () => restoreDisclosureJob(job));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        restoreDisclosureJob(job);
+      }
+    });
     const title = document.createElement("span");
     title.textContent = `${job.date || "未知日期"} · ${job.status}`;
     const meta = document.createElement("span");
     meta.className = "muted mono";
     meta.textContent = `${job.processed_count || 0}/${job.total_count || "?"} · ${job.job_id}`;
-    row.append(title, meta);
+    if (job.status === "cancelled" && job.bundle) {
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = "text";
+      action.textContent = "续扫";
+      action.addEventListener("click", (event) => {
+        event.stopPropagation();
+        resumeDisclosureJob(job);
+      });
+      row.append(title, meta, action);
+    } else {
+      row.append(title, meta);
+    }
     list.append(row);
   }
   jobHistory.replaceChildren(list);
@@ -1026,6 +1050,36 @@ function startDisclosureJobPolling(jobId) {
       });
     }
   }, 1000);
+}
+
+async function resumeDisclosureJob(job) {
+  if (!job?.job_id || state.activeJobId) return;
+  const date = job.date || selectedDate();
+  scanProgress.start(`正在续扫 ${date}…`);
+  setScanState("scanning");
+  try {
+    const resumed = await api.startDisclosureDayJob(date, job.job_id);
+    state.activeJobId = resumed.job_id;
+    renderJobProgress(resumed);
+    startDisclosureJobPolling(resumed.job_id);
+    notify("已从历史扫描继续");
+  } catch (error) {
+    scanProgress.hide();
+    setScanState("idle");
+    setStatus({ error: error.message });
+    notify(error.message, true);
+  }
+}
+
+async function pruneJobHistory() {
+  try {
+    const result = await api.pruneDisclosureDayJobs(20);
+    notify(`已清理 ${result.deleted || 0} 条旧扫描记录`);
+    await loadJobHistory();
+  } catch (error) {
+    setStatus({ error: error.message });
+    notify(error.message, true);
+  }
 }
 
 function restoreDisclosureJob(job) {
@@ -1265,6 +1319,7 @@ el("cancel-feishu").addEventListener("click", () => feishuDialog.close());
 el("close-dialog").addEventListener("click", () => evidenceDialog.close());
 
 el("refresh-job-history").addEventListener("click", loadJobHistory);
+el("prune-job-history").addEventListener("click", pruneJobHistory);
 el("poll-rss").addEventListener("click", async () => {
   try {
     const result = await api.pollRss();

@@ -7,11 +7,12 @@ from copilot.datasource.fundamentals import TushareFundamentalsClient
 from copilot.datasource.tushare_client import TushareTokenMissing, create_tushare_pro
 from copilot.eval.backtest import BacktestSummary
 from copilot.notify.feishu import FeishuNotifier, render_disclosure_interactive_card, render_formal_disclosure_text, split_feishu_text
-from copilot.report.builder import build_daily_summary, build_quarterly_review
+from copilot.report.builder import build_quarterly_review
 from copilot.scheduler import DisclosureAutomationJob, run_disclosure_automation_job
 from copilot.rss.service import RssPollResult, RssPollService
 from copilot.service.analyzer import AnalyzerService
 from copilot.service.disclosure_jobs import SQLiteDisclosureJobStore
+from copilot.service.disclosure_scan import merge_analysis_bundles
 from copilot.service.notify_store import NotifyLogStore
 from copilot.service.report_cache import ReportCache
 from copilot.service.review_metrics import ReviewMetricsService
@@ -123,20 +124,24 @@ class RealReportService:
             self.cache.put_company(card)
         self.cache.put_daily(bundle.summary)
 
-    def start_disclosure_day_job(self, date):
+    def start_disclosure_day_job(self, date, resume_from_job_id=None, owner_id=None):
         if self.analyzer is None:
             raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
-        return self.job_store.start(date)
+        return self.job_store.start(date, resume_from_job_id=resume_from_job_id, owner_id=owner_id)
 
     def run_disclosure_day_job(self, job_id):
         job = self.job_store.get(job_id)
+        resume_bundle = self._resume_source_bundle(job.resume_from_job_id)
+        skip_ts_codes = {event.ts_code for event in resume_bundle.scan.events} if resume_bundle is not None else set()
         self.job_store.set_active(job_id)
         try:
             bundle = self.analyzer.analyze_disclosure_day_bundle(
                 job.date,
                 progress_callback=lambda event: self.job_store.apply_progress(job_id, event),
                 should_cancel=lambda: self.job_store.should_cancel(job_id),
+                skip_ts_codes=skip_ts_codes,
             )
+            bundle = merge_analysis_bundles(resume_bundle, bundle)
             self._cache_bundle(bundle)
             if self.job_store.should_cancel(job_id):
                 return self.job_store.mark_cancelled(job_id, bundle)
@@ -146,14 +151,23 @@ class RealReportService:
         finally:
             self.job_store.set_active(None)
 
-    def list_disclosure_day_jobs(self, limit=20):
-        return self.job_store.list_recent(limit)
+    def _resume_source_bundle(self, resume_from_job_id):
+        if resume_from_job_id is None:
+            return None
+        source = self.job_store.get(resume_from_job_id)
+        return source.bundle
 
-    def get_disclosure_day_job(self, job_id):
-        return self.job_store.get(job_id)
+    def list_disclosure_day_jobs(self, limit=20, owner_id=None):
+        return self.job_store.list_recent(limit, owner_id=owner_id)
 
-    def cancel_disclosure_day_job(self, job_id):
-        return self.job_store.request_cancel(job_id)
+    def get_disclosure_day_job(self, job_id, owner_id=None):
+        return self.job_store.get(job_id, owner_id=owner_id)
+
+    def cancel_disclosure_day_job(self, job_id, owner_id=None):
+        return self.job_store.request_cancel(job_id, owner_id=owner_id)
+
+    def prune_disclosure_day_jobs(self, keep_recent=20):
+        return self.job_store.prune_finished(keep_recent)
 
     def analyze_disclosure_day(self, date):
         return self.analyze_disclosure_day_bundle(date).summary

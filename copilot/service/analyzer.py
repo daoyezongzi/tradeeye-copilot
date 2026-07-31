@@ -101,10 +101,17 @@ class AnalyzerService:
         except Exception as exc:
             return CompanyAnalysisResult(status=CompanyAnalysisStatus.ERROR, message=str(exc))
 
-    def analyze_disclosure_day_bundle(self, date: str, progress_callback=None, should_cancel=None) -> DisclosureAnalysisBundle:
+    def analyze_disclosure_day_bundle(
+        self,
+        date: str,
+        progress_callback=None,
+        should_cancel=None,
+        skip_ts_codes: set[str] | None = None,
+    ) -> DisclosureAnalysisBundle:
         if self.calendar is None:
             return build_analysis_bundle(date, coverage_count=len(self.coverage_pool), results=[])
-        events = self.calendar.fetch_events(date, set(self.coverage_pool))
+        skip_ts_codes = skip_ts_codes or set()
+        events = [event for event in self.calendar.fetch_events(date, set(self.coverage_pool)) if event.ts_code not in skip_ts_codes]
         total_count = len(events)
         if progress_callback is not None:
             progress_callback(DisclosureProgressEvent(stage="events_loaded", processed_count=0, total_count=total_count))

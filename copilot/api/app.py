@@ -23,6 +23,7 @@ class AnalyzeCompanyRequest(BaseModel):
 
 class AnalyzeDisclosureDayRequest(BaseModel):
     date: str
+    resume_from_job_id: str | None = None
 
 
 class AutomationDisclosureDayRequest(BaseModel):
@@ -97,6 +98,8 @@ class DisclosureJobStatus(BaseModel):
     total_count: int
     ok_count: int
     data_problem_count: int
+    owner_id: str | None = None
+    resume_from_job_id: str | None = None
     current_ts_code: str | None = None
     current_name: str | None = None
     current_period: str | None = None
@@ -104,6 +107,10 @@ class DisclosureJobStatus(BaseModel):
     elapsed_seconds: float
     logs: list[str]
     bundle: DisclosureAnalysisBundle | None = None
+
+
+class PruneDisclosureJobsResult(BaseModel):
+    deleted: int
 
 
 class ReportService(Protocol):
@@ -125,15 +132,17 @@ class ReportService(Protocol):
 
     def analyze_disclosure_day_bundle(self, date: str) -> DisclosureAnalysisBundle: ...
 
-    def start_disclosure_day_job(self, date: str) -> DisclosureJobStatus: ...
+    def start_disclosure_day_job(self, date: str, resume_from_job_id: str | None = None, owner_id: str | None = None) -> DisclosureJobStatus: ...
 
     def run_disclosure_day_job(self, job_id: str) -> DisclosureJobStatus: ...
 
-    def list_disclosure_day_jobs(self, limit: int = 20) -> list[DisclosureJobStatus]: ...
+    def list_disclosure_day_jobs(self, limit: int = 20, owner_id: str | None = None) -> list[DisclosureJobStatus]: ...
 
-    def get_disclosure_day_job(self, job_id: str) -> DisclosureJobStatus: ...
+    def get_disclosure_day_job(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus: ...
 
-    def cancel_disclosure_day_job(self, job_id: str) -> DisclosureJobStatus: ...
+    def cancel_disclosure_day_job(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus: ...
+
+    def prune_disclosure_day_jobs(self, keep_recent: int = 20) -> int: ...
 
     def upsert_review_label(self, label: ReviewLabelRequest) -> StoredReviewLabel: ...
 
@@ -207,23 +216,35 @@ def create_app(report_service: ReportService) -> FastAPI:
         return report_service.analyze_disclosure_day_bundle(request.date)
 
     @app.post("/api/disclosure-day/jobs", response_model=DisclosureJobStatus)
-    def start_disclosure_day_job(request: AnalyzeDisclosureDayRequest, background_tasks: BackgroundTasks):
-        job = report_service.start_disclosure_day_job(request.date)
+    def start_disclosure_day_job(
+        request: AnalyzeDisclosureDayRequest,
+        background_tasks: BackgroundTasks,
+        x_tradeeye_owner: str | None = Header(default=None),
+    ):
+        job = report_service.start_disclosure_day_job(
+            request.date,
+            resume_from_job_id=request.resume_from_job_id,
+            owner_id=x_tradeeye_owner,
+        )
         job_id = job.job_id if hasattr(job, "job_id") else job["job_id"]
         background_tasks.add_task(report_service.run_disclosure_day_job, job_id)
         return job
 
     @app.get("/api/disclosure-day/jobs", response_model=list[DisclosureJobStatus])
-    def list_disclosure_day_jobs(limit: int = 20):
-        return report_service.list_disclosure_day_jobs(limit)
+    def list_disclosure_day_jobs(limit: int = 20, x_tradeeye_owner: str | None = Header(default=None)):
+        return report_service.list_disclosure_day_jobs(limit, owner_id=x_tradeeye_owner)
 
     @app.get("/api/disclosure-day/jobs/{job_id}", response_model=DisclosureJobStatus)
-    def get_disclosure_day_job(job_id: str):
-        return report_service.get_disclosure_day_job(job_id)
+    def get_disclosure_day_job(job_id: str, x_tradeeye_owner: str | None = Header(default=None)):
+        return report_service.get_disclosure_day_job(job_id, owner_id=x_tradeeye_owner)
 
     @app.post("/api/disclosure-day/jobs/{job_id}/cancel", response_model=DisclosureJobStatus)
-    def cancel_disclosure_day_job(job_id: str):
-        return report_service.cancel_disclosure_day_job(job_id)
+    def cancel_disclosure_day_job(job_id: str, x_tradeeye_owner: str | None = Header(default=None)):
+        return report_service.cancel_disclosure_day_job(job_id, owner_id=x_tradeeye_owner)
+
+    @app.delete("/api/disclosure-day/jobs", response_model=PruneDisclosureJobsResult)
+    def prune_disclosure_day_jobs(keep_recent: int = 20):
+        return PruneDisclosureJobsResult(deleted=report_service.prune_disclosure_day_jobs(keep_recent))
 
     @app.get("/api/reviews/labels.csv")
     def export_review_labels_csv(ts_code: str | None = None, period: str | None = None):

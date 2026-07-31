@@ -45,12 +45,17 @@ def test_advanced_sections_are_collapsed_disclosures(html, css):
 def test_job_history_has_refresh_and_restore_controls(html, js):
     assert 'id="job-history"' in html
     assert 'id="refresh-job-history"' in html
+    assert 'id="prune-job-history"' in html
     assert "listDisclosureDayJobs" in js
+    assert "pruneDisclosureDayJobs" in js
+    assert "resumeDisclosureJob" in js
+    assert "resume_from_job_id" in js
     assert "renderJobHistory" in js
     assert "loadJobHistory" in js
     assert "restoreDisclosureJob" in js
     assert "/api/disclosure-day/jobs?limit=" in js
     assert 'el("refresh-job-history").addEventListener("click", loadJobHistory)' in js
+    assert 'el("prune-job-history").addEventListener("click", pruneJobHistory)' in js
     assert "loadJobHistory();" in js
 
 

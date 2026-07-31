@@ -7,7 +7,7 @@ from copilot.scheduler import DisclosureAutomationJob, run_disclosure_automation
 from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult, CompanyAnalysisStatus
 from copilot.service.disclosure_jobs import DisclosureJobStore
-from copilot.service.disclosure_scan import build_analysis_bundle
+from copilot.service.disclosure_scan import build_analysis_bundle, merge_analysis_bundles
 from copilot.eval.manual_review import ReviewLabel, compute_precision_breakdown
 from copilot.service.review_store import StoredReviewLabel
 
@@ -174,9 +174,12 @@ class DemoReportService:
             message=f"demo service 未包含 {ts_code} {period}",
         )
 
-    def analyze_disclosure_day_bundle(self, date):
+    def analyze_disclosure_day_bundle(self, date, skip_ts_codes=None):
         if date == self.summary.date:
-            return self.bundle
+            if not skip_ts_codes:
+                return self.bundle
+            results = [result for result in self.results if result[0] not in skip_ts_codes]
+            return build_analysis_bundle(date=date, coverage_count=len(COMPANY_NAMES), results=results)
         return build_analysis_bundle(date=date, coverage_count=len(COMPANY_NAMES), results=[])
 
     def analyze_disclosure_day(self, date):
@@ -185,22 +188,33 @@ class DemoReportService:
     def scan_disclosure_day(self, date):
         return self.analyze_disclosure_day_bundle(date).scan
 
-    def start_disclosure_day_job(self, date):
-        return self.job_store.start(date)
+    def start_disclosure_day_job(self, date, resume_from_job_id=None, owner_id=None):
+        return self.job_store.start(date, resume_from_job_id=resume_from_job_id, owner_id=owner_id)
 
     def run_disclosure_day_job(self, job_id):
         job = self.job_store.get(job_id)
-        bundle = self.analyze_disclosure_day_bundle(job.date)
+        resume_bundle = self._resume_source_bundle(job.resume_from_job_id)
+        skip_ts_codes = {event.ts_code for event in resume_bundle.scan.events} if resume_bundle is not None else set()
+        bundle = self.analyze_disclosure_day_bundle(job.date, skip_ts_codes=skip_ts_codes)
+        bundle = merge_analysis_bundles(resume_bundle, bundle)
         return self.job_store.mark_completed(job.job_id, bundle)
 
-    def list_disclosure_day_jobs(self, limit=20):
-        return self.job_store.list_recent(limit)
+    def _resume_source_bundle(self, resume_from_job_id):
+        if resume_from_job_id is None:
+            return None
+        return self.job_store.get(resume_from_job_id).bundle
 
-    def get_disclosure_day_job(self, job_id):
-        return self.job_store.get(job_id)
+    def list_disclosure_day_jobs(self, limit=20, owner_id=None):
+        return self.job_store.list_recent(limit, owner_id=owner_id)
 
-    def cancel_disclosure_day_job(self, job_id):
-        return self.job_store.request_cancel(job_id)
+    def get_disclosure_day_job(self, job_id, owner_id=None):
+        return self.job_store.get(job_id, owner_id=owner_id)
+
+    def cancel_disclosure_day_job(self, job_id, owner_id=None):
+        return self.job_store.request_cancel(job_id, owner_id=owner_id)
+
+    def prune_disclosure_day_jobs(self, keep_recent=20):
+        return self.job_store.prune_finished(keep_recent)
 
     def upsert_review_label(self, label):
         stored = StoredReviewLabel(**label.model_dump(), updated_at=0.0)
