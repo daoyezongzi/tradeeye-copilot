@@ -2,6 +2,37 @@
 
 ## 2026-07-31
 
+### 披露日扫描实时进度与停止
+
+把披露日扫描从“一次长请求等全部 Tushare 拉完”改为可观察、可停止的 job 流程：
+
+```http
+POST /api/disclosure-day/jobs
+GET  /api/disclosure-day/jobs/{job_id}
+POST /api/disclosure-day/jobs/{job_id}/cancel
+```
+
+已实现：
+
+- 后端新增内存 `DisclosureJobStore`，记录 `running / completed / cancelled / failed`、已处理家数、总数、当前公司、当前报告期、当前阶段、OK 数、数据问题数、耗时、最近日志与最终 partial/full bundle。
+- FastAPI 启动 job 后立即返回 `job_id`，扫描任务放入 `BackgroundTasks`，前端不再被长请求阻塞。
+- `AnalyzerService.analyze_disclosure_day_bundle()` 支持 `progress_callback` 与 `should_cancel`，每家公司开始/完成时上报进度，取消后保留已完成结果。
+- `TushareFundamentalsClient` 增加表级 stage：`fetch_income / fetch_balancesheet / fetch_cashflow / fetch_indicator`，因此 UI 能显示正在抓哪家公司、哪张表。
+- 取消不是强杀线程，而是在公司之间、Tushare 表之间检查 cancel flag；已完成公司保留，未完成部分不硬填假结果。
+- 前端新增「停止扫描」按钮，披露日扫描改为 start job + 1 秒轮询，完成/取消后仍渲染 summary、cards、diagnostics。
+
+验证：
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+143 passed
+```
+
 ### P2 工作台改版：研报式信息架构 + Anthropic 色板
 
 在 `artifacts/ui-preview/` 下先做了四个独立方向的原型（终端 / 研报排版 / 深色控制台 / Claude 设计语言），
