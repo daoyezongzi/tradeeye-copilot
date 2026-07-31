@@ -59,6 +59,26 @@ def test_job_history_has_refresh_and_restore_controls(html, js):
     assert "loadJobHistory();" in js
 
 
+
+
+def test_developer_panel_visualizes_automation_feishu_and_review_sync(html, js):
+    assert 'id="automation-date" type="date"' in html
+    assert 'id="run-automation"' in html
+    assert 'id="automation-status"' in html
+    assert 'id="refresh-notify-logs"' in html
+    assert 'id="notify-log-table"' in html
+    assert 'id="review-sync-status"' in html
+    assert "runDisclosureAutomation" in js
+    assert "listNotifyLogs" in js
+    assert "renderAutomationStatus" in js
+    assert "renderNotifyLogs" in js
+    assert "renderReviewSyncStatus" in js
+    assert '"/api/automation/disclosure-day"' in js
+    assert '"/api/notify/logs?limit="' in js
+    assert 'el("run-automation").addEventListener("click", runAutomation)' in js
+    assert 'el("refresh-notify-logs").addEventListener("click", loadNotifyLogs)' in js
+
+
 def test_feishu_preview_requires_send_confirmation(html, js):
     assert 'id="feishu-dialog"' in html
     assert 'id="feishu-preview-text"' in html

@@ -123,6 +123,26 @@
                 <div id="job-history" class="job-history empty">尚无扫描历史</div>
               </div>
               <div class="fold__block">
+                <h3>自动化联调</h3>
+                <p>手动触发自动化扫描并查看最近一次扫描与通知结果</p>
+                <div class="button-row">
+                  <input id="automation-date" type="date" value="2025-08-21" aria-label="自动化披露日期" />
+                  <button id="run-automation" class="outlined">运行自动化</button>
+                </div>
+                <div id="automation-status" class="empty">尚未触发自动化</div>
+              </div>
+              <div class="fold__block">
+                <h3>飞书通知日志</h3>
+                <p>展示后端 notify_logs 最近发送或跳过原因</p>
+                <button id="refresh-notify-logs" class="outlined">刷新通知日志</button>
+                <div id="notify-log-table" class="empty">尚无通知日志</div>
+              </div>
+              <div class="fold__block">
+                <h3>复核回写状态</h3>
+                <p>读取后端复核标签，确认飞书 callback / 前端标注已落库</p>
+                <div id="review-sync-status" class="empty">尚未加载复核回写状态</div>
+              </div>
+              <div class="fold__block">
                 <h3>披露季复盘</h3>
                 <div class="metric-grid" id="quarterly-review"></div>
               </div>

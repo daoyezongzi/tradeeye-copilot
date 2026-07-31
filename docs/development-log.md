@@ -2,6 +2,37 @@
 
 ## 2026-07-31
 
+### 阶段归档：开发者区自动化与飞书联调状态可视化
+
+本阶段完成 #55，把已存在的自动化、飞书通知日志和后端复核标签接到开发者区：
+
+- 开发者区新增「自动化联调」块，可选择披露日期并调用 `POST /api/automation/disclosure-day`。
+- 自动化结果展示 date / job_id / scan_status / notify_sent / notify_reason，便于本地和部署后人工联调。
+- 新增「飞书通知日志」块，调用 `GET /api/notify/logs?limit=20`，展示 channel / dedupe_key / sent / reason。
+- 新增「复核回写状态」块，复用 `GET /api/reviews/labels` 的后端标签数据，显示已落库标签数与 reviewer 数量。
+- 自动化完成后会刷新通知日志和复核标签状态，保持开发者区与后端状态一致。
+
+自审结论：
+
+- 本节点只接入现有后端接口，不新增自动化鉴权或通知发送语义。
+- 飞书真实发送仍通过已有预览确认弹窗；开发者区自动化入口使用后端 `notify=true` 的自动化语义。
+- 复核回写状态读取后端 labels，不重新引入 localStorage。
+- `diff --check` 干净。
+
+验证：
+
+```bash
+python -m pytest tests/test_frontend_productization.py -q --basetemp=.pytest_tmp
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+18 passed
+184 passed
+```
+
 ### 阶段归档：披露扫描续扫与运行维护增强
 
 本阶段完成 #51 的可恢复扫描闭环，并补上运行维护边界：

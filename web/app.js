@@ -17,6 +17,9 @@ const companyDetail = el("company-detail");
 const companyPermalinkHint = el("company-permalink-hint");
 const diagnosticStatus = el("diagnostic-status");
 const jobHistory = el("job-history");
+const automationStatus = el("automation-status");
+const notifyLogTable = el("notify-log-table");
+const reviewSyncStatus = el("review-sync-status");
 const quarterlyReview = el("quarterly-review");
 const operationStatus = el("operation-status");
 const metaStatus = el("meta-status");
@@ -180,6 +183,18 @@ const api = {
 
   async pollRss() {
     return requestJson("/api/rss/poll", { method: "POST" });
+  },
+
+  async runDisclosureAutomation(date, notify = true) {
+    return requestJson("/api/automation/disclosure-day", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, notify }),
+    });
+  },
+
+  async listNotifyLogs(limit = 20) {
+    return requestJson("/api/notify/logs?limit=" + limit);
   },
 
   async getEvidence(tsCode, period, ruleId) {
@@ -796,7 +811,108 @@ function renderDiagnostics(result) {
   diagnosticStatus.replaceChildren(summary, result.events.length > 0 ? table : makeEmpty("当日覆盖池无披露事件"));
 }
 
-/* ---------- 复核状态 ---------- */
+function renderAutomationStatus(result) {
+  if (!result) {
+    automationStatus.replaceChildren(makeEmpty("尚未触发自动化"));
+    return;
+  }
+  automationStatus.className = "metric-grid";
+  const items = [
+    { label: "日期", value: result.date },
+    { label: "job", value: result.job_id },
+    { label: "扫描", value: result.scan_status },
+    { label: "通知", value: result.notify_sent ? "已发送" : "未发送" },
+    { label: "原因", value: result.notify_reason || "-" },
+  ];
+  automationStatus.replaceChildren(
+    ...items.map((item) => {
+      const node = document.createElement("div");
+      node.className = "metric";
+      const label = document.createElement("span");
+      label.textContent = item.label;
+      const value = document.createElement("strong");
+      value.textContent = String(item.value ?? "-");
+      node.append(label, value);
+      return node;
+    })
+  );
+}
+
+async function runAutomation() {
+  const date = toApiDate(el("automation-date").value) || selectedDate();
+  if (!date) {
+    notify("请先选择自动化日期", true);
+    return;
+  }
+  automationStatus.replaceChildren(makeEmpty("自动化运行中…"));
+  try {
+    const result = await api.runDisclosureAutomation(date, true);
+    renderAutomationStatus(result);
+    await loadNotifyLogs();
+    await loadReviewLabels();
+    notify(`${date} 自动化运行完成`);
+  } catch (error) {
+    automationStatus.replaceChildren(makeEmpty(error.message));
+    setStatus({ error: error.message });
+    notify(error.message, true);
+  }
+}
+
+function renderNotifyLogs(logs) {
+  if (!logs.length) {
+    notifyLogTable.replaceChildren(makeEmpty("尚无通知日志"));
+    return;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "table-wrap";
+  const rows = logs
+    .map(
+      (entry) =>
+        `<tr><td>${escapeHtml(entry.channel)}</td><td class="mono">${escapeHtml(entry.dedupe_key)}</td><td>${entry.sent ? "已发送" : "未发送"}</td><td>${escapeHtml(entry.reason)}</td></tr>`
+    )
+    .join("");
+  wrap.innerHTML = `
+    <table>
+      <thead><tr><th>渠道</th><th>去重键</th><th>状态</th><th>原因</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  notifyLogTable.replaceChildren(wrap);
+}
+
+async function loadNotifyLogs() {
+  try {
+    const logs = await api.listNotifyLogs(20);
+    renderNotifyLogs(logs);
+    return logs;
+  } catch (error) {
+    notifyLogTable.replaceChildren(makeEmpty(error.message));
+    setStatus({ error: error.message });
+    return [];
+  }
+}
+
+function renderReviewSyncStatus(labels = Object.values(state.reviewLabels)) {
+  const reviewed = labels.length;
+  const reviewers = new Set(labels.map((label) => label.reviewer).filter(Boolean));
+  reviewSyncStatus.className = "metric-grid";
+  const items = [
+    { label: "后端标签", value: reviewed },
+    { label: "回写人", value: reviewers.size || "待回写" },
+  ];
+  reviewSyncStatus.replaceChildren(
+    ...items.map((item) => {
+      const node = document.createElement("div");
+      node.className = "metric";
+      const label = document.createElement("span");
+      label.textContent = item.label;
+      const value = document.createElement("strong");
+      value.textContent = String(item.value);
+      node.append(label, value);
+      return node;
+    })
+  );
+}
 
 function reviewKey(tsCode, period, ruleId) {
   return `${tsCode}|${period}|${ruleId}`;
@@ -813,6 +929,7 @@ function loadReviewLabels() {
     state.reviewLabels = Object.fromEntries(labels.map((entry) => [reviewKey(entry.ts_code, entry.period, entry.rule_id), entry]));
     renderCards();
     renderReview();
+    renderReviewSyncStatus(labels);
     return labels;
   });
 }
@@ -1320,6 +1437,8 @@ el("close-dialog").addEventListener("click", () => evidenceDialog.close());
 
 el("refresh-job-history").addEventListener("click", loadJobHistory);
 el("prune-job-history").addEventListener("click", pruneJobHistory);
+el("run-automation").addEventListener("click", runAutomation);
+el("refresh-notify-logs").addEventListener("click", loadNotifyLogs);
 el("poll-rss").addEventListener("click", async () => {
   try {
     const result = await api.pollRss();
@@ -1359,6 +1478,8 @@ window.addEventListener("hashchange", applyRoute);
 async function boot() {
   // 未来日期不可能有已披露财报，直接由控件挡住
   el("disclosure-date").max = new Date().toISOString().slice(0, 10);
+  el("automation-date").max = el("disclosure-date").max;
+  el("automation-date").value = el("disclosure-date").value;
   initPeriodSelect("20250630");
   await loadMeta();
   renderCards();
@@ -1370,6 +1491,8 @@ async function boot() {
   loadReviewMetrics();
   loadQuarterly();
   loadJobHistory();
+  loadNotifyLogs();
+  renderAutomationStatus(null);
   await applyRoute();
 }
 
