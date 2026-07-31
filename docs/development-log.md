@@ -2,6 +2,29 @@
 
 ## 2026-07-31
 
+### P0 规则质量与评估闭环推进
+
+本轮按“规则质量优先、自动化后置”的新优先级补齐了评估侧可落地闭环，不新增臆造行业规则。
+
+已实现：
+
+- `eval/manual_review_template.csv` 从 `ts_code,period,rule_id,label,notes` 扩为 `ts_code,period,rule_id,label,notes,severity,industry`，前端复核导出同步携带最高严重度与行业路由，便于人工复核结果回流分组统计。
+- `copilot.eval.manual_review.compute_precision_breakdown()`：在 overall precision 之外，输出 `by_rule`、`by_severity`、`by_industry` 三组 precision；仍只统计 `TRUE / FALSE`，忽略 `UNREVIEWED`。
+- `BacktestSummary` 增加 `severity_distribution` 与 `industry_distribution`，benchmark 不只看规则命中数量，也能看红/黄分布与行业样本分布。
+- `copilot.eval.real_backtest.summarize_scan_failures()`：对多日 disclosure scan 的非 OK 事件按 `status`、`industry`、`message` 聚合，支持后续用真实失败原因驱动规则包。
+
+验证：
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+134 passed
+```
+
 ### 日期选择器与视觉细化
 
 披露日从手输 `YYYYMMDD` 文本框改为原生日期选择器：
@@ -119,10 +142,10 @@ python -m pytest -q --basetemp=.pytest_tmp
 129 passed
 ```
 
-### 本轮未做
+### 本轮仍未做
 
 - 飞书交互卡片 / 按钮 callback：预览与发送确认仍在 Web 端，飞书侧仍是静态文本。
-- 复核标注仅存浏览器 localStorage，未落库、未回流 `eval/` 精确率链路。
+- 复核标注仍存浏览器 localStorage，尚未落库；但前端导出已可回流 `eval/` 做按规则、严重度、行业分组 precision。
 - 稳定 URL 是前端 hash 路由，不是可分享的服务端渲染详情页。
 - 前端未做真实 Tushare 大覆盖池压测；进度条为 indeterminate，因为后端未提供逐家进度事件。
 - 导出为前端内存数据导出，未提供后端导出接口。
@@ -133,14 +156,14 @@ python -m pytest -q --basetemp=.pytest_tmp
 
 - 行业规则优先：银行目前只做了 hard-check 分流，尚未实现净息差、不良率、拨备覆盖率、资本充足率等真实银行指标。
 - 其他行业规则包：券商、保险、地产、公用事业等仍待真实失败样本驱动，不预先臆造规则。
-- 阈值校准：对现有应收、存货、现金流、毛利率、利润/营收背离等规则跑真实披露季 benchmark，识别误报与漏报。
-- 人工复核 precision：把前端导出的复核结果回流 `eval/`，形成按规则、行业、严重度分组的 precision 统计。
+- 阈值校准：对现有应收、存货、现金流、毛利率、利润/营收背离等规则跑真实披露季 benchmark，识别误报与漏报；当前已能输出规则、严重度、行业分布。
+- 人工复核 precision：前端导出已携带 `severity / industry`，`eval` 已支持 overall / by_rule / by_severity / by_industry precision；下一步是用真实复核 CSV 跑样本。
 - 规则证据质量：每条 finding 继续保留可复核 Evidence，避免 LLM 或文本归因替代算术规则。
 
 #### P0：正式覆盖池与样本扫描
 
 - 当前 100 支仍是烟测池，需要替换为真实关注股票池，并通过 watchlist loader 校验公司名与行业路由。
-- 用正式覆盖池跑多披露日 scan，输出 `OK / DATA_NOT_READY / DATA_INCOMPLETE / ERROR` 分布与失败原因。
+- 用正式覆盖池跑多披露日 scan，输出 `OK / DATA_NOT_READY / DATA_INCOMPLETE / ERROR` 分布与失败原因；当前已有多日 scan count 与 failure grouping helper，待接真实扫描产物。
 - 根据真实失败样本决定下一批行业规则，不按行业名称预先臆造。
 - 后端已支持单次 `DisclosureAnalysisBundle` 复用，但真实大覆盖池还需要记录耗时、Tushare 调用次数、重试次数与失败分布。
 
