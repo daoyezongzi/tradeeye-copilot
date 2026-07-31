@@ -1,5 +1,5 @@
-from copilot.eval.backtest import BacktestCompanyResult, summarize_backtest
 from copilot.models import Evidence, Finding, Severity
+from copilot.eval.backtest import BacktestCompanyResult, summarize_backtest
 
 
 def finding(rule_id, severity):
@@ -15,9 +15,15 @@ def finding(rule_id, severity):
 
 def test_summarize_backtest_counts_companies_and_findings():
     results = [
-        BacktestCompanyResult(ts_code="000001.SZ", period="20250630", status="OK", findings=[finding("cashflow_quality", Severity.YELLOW)]),
-        BacktestCompanyResult(ts_code="600000.SH", period="20250630", status="OK", findings=[finding("gross_margin_change", Severity.YELLOW), finding("non_recurring_profit_share", Severity.YELLOW)]),
-        BacktestCompanyResult(ts_code="000002.SZ", period="20250630", status="DATA_INCOMPLETE", findings=[]),
+        BacktestCompanyResult(ts_code="000001.SZ", period="20250630", status="OK", industry="bank", findings=[finding("cashflow_quality", Severity.YELLOW)]),
+        BacktestCompanyResult(
+            ts_code="600000.SH",
+            period="20250630",
+            status="OK",
+            industry="generic",
+            findings=[finding("gross_margin_change", Severity.RED), finding("non_recurring_profit_share", Severity.YELLOW)],
+        ),
+        BacktestCompanyResult(ts_code="000002.SZ", period="20250630", status="DATA_INCOMPLETE", industry="generic", findings=[]),
     ]
 
     summary = summarize_backtest("20250801", "20250831", coverage_count=42, results=results)
@@ -32,3 +38,5 @@ def test_summarize_backtest_counts_companies_and_findings():
         "gross_margin_change": 1,
         "non_recurring_profit_share": 1,
     }
+    assert summary.severity_distribution == {"RED": 1, "YELLOW": 2}
+    assert summary.industry_distribution == {"bank": 1, "generic": 2}

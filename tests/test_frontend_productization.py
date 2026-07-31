@@ -88,10 +88,13 @@ def test_review_state_ui_exports_manual_review_columns(html, js):
     assert 'id="export-review-csv"' in html
     assert "REVIEW_STORAGE_KEY" in js
     assert "renderReviewActions" in js
-    # 列结构需与 eval/manual_review_template.csv 对齐
+    # 列结构需与 eval/manual_review_template.csv 对齐，并保留评估分组需要的维度
     template_header = Path("eval/manual_review_template.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert template_header == "ts_code,period,rule_id,label,notes,severity,industry"
     expected = '["' + '", "'.join(template_header.split(",")) + '"]'
     assert expected in js
+    assert "severity: card.max_severity || \"\"" in js
+    assert "industry: scanEvent?.industry || \"unknown\"" in js
 
 
 def test_rendering_escapes_untrusted_values(js):

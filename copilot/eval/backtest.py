@@ -1,5 +1,5 @@
 from collections import Counter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from copilot.models import Finding
 
@@ -10,6 +10,7 @@ class BacktestCompanyResult(BaseModel):
     status: str
     findings: list[Finding]
     elapsed_seconds: float | None = None
+    industry: str | None = None
 
 
 class BacktestSummary(BaseModel):
@@ -22,6 +23,8 @@ class BacktestSummary(BaseModel):
     finding_count: int
     finding_distribution: dict[str, int]
     company_results: list[BacktestCompanyResult]
+    severity_distribution: dict[str, int] = Field(default_factory=dict)
+    industry_distribution: dict[str, int] = Field(default_factory=dict)
 
 
 def summarize_backtest(
@@ -30,10 +33,15 @@ def summarize_backtest(
     coverage_count: int,
     results: list[BacktestCompanyResult],
 ) -> BacktestSummary:
-    distribution = Counter()
+    rule_distribution = Counter()
+    severity_distribution = Counter()
+    industry_distribution = Counter()
     for result in results:
+        if result.industry:
+            industry_distribution[result.industry] += 1
         for finding in result.findings:
-            distribution[finding.rule_id] += 1
+            rule_distribution[finding.rule_id] += 1
+            severity_distribution[finding.severity.value] += 1
     return BacktestSummary(
         start_date=start_date,
         end_date=end_date,
@@ -42,6 +50,8 @@ def summarize_backtest(
         ok_count=sum(1 for result in results if result.status == "OK"),
         data_incomplete_count=sum(1 for result in results if result.status == "DATA_INCOMPLETE"),
         finding_count=sum(len(result.findings) for result in results),
-        finding_distribution=dict(sorted(distribution.items())),
+        finding_distribution=dict(sorted(rule_distribution.items())),
         company_results=results,
+        severity_distribution=dict(sorted(severity_distribution.items())),
+        industry_distribution=dict(sorted(industry_distribution.items())),
     )

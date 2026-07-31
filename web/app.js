@@ -631,12 +631,15 @@ function setReviewLabel(card, label) {
   if (label === "UNREVIEWED") {
     delete state.reviewLabels[key];
   } else {
+    const scanEvent = state.bundle?.scan.events.find((event) => event.ts_code === card.ts_code && event.period === card.period);
     state.reviewLabels[key] = {
       ts_code: card.ts_code,
       period: card.period,
       rule_id: card.findings[0]?.rule_id || "",
       label,
       notes: "",
+      severity: card.max_severity || "",
+      industry: scanEvent?.industry || "unknown",
     };
   }
   persistReviewLabels();
@@ -752,8 +755,8 @@ function exportReviewCsv() {
     notify("尚无标注可导出", true);
     return;
   }
-  const header = ["ts_code", "period", "rule_id", "label", "notes"];
-  const rows = entries.map((entry) => [entry.ts_code, entry.period, entry.rule_id, entry.label, entry.notes]);
+  const header = ["ts_code", "period", "rule_id", "label", "notes", "severity", "industry"];
+  const rows = entries.map((entry) => [entry.ts_code, entry.period, entry.rule_id, entry.label, entry.notes, entry.severity, entry.industry]);
   downloadFile("manual_review.csv", toCsv(header, rows), "text/csv");
 }
 
