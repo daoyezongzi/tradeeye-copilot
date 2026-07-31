@@ -44,10 +44,10 @@ Secrets are read from environment variables only:
 
 Non-secret settings are in `config.yaml`.
 
-## Run demo dashboard
+## Run local server
 
 ```bash
-uvicorn copilot.api.dev_app:app --reload
+uvicorn copilot.api.real_app:app --reload
 ```
 
 Open the local dashboard and click `依据` to inspect evidence JSON.

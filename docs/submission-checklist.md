@@ -5,7 +5,7 @@
 - [ ] `pytest -q` passes
 - [ ] `.env` is not tracked
 - [ ] No real API key, token, or webhook URL appears in committed files
-- [ ] `uvicorn copilot.api.dev_app:app --reload` starts locally
+- [ ] `uvicorn copilot.api.real_app:app --reload` starts locally
 - [ ] Evidence drill-down works in the dashboard
 
 ## Benchmark
