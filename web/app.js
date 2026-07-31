@@ -16,6 +16,7 @@ const cardGroups = el("card-groups");
 const companyDetail = el("company-detail");
 const companyPermalinkHint = el("company-permalink-hint");
 const diagnosticStatus = el("diagnostic-status");
+const jobHistory = el("job-history");
 const quarterlyReview = el("quarterly-review");
 const operationStatus = el("operation-status");
 const metaStatus = el("meta-status");
@@ -153,6 +154,10 @@ const api = {
 
   async getDisclosureDayJob(jobId) {
     return requestJson(`/api/disclosure-day/jobs/${jobId}`);
+  },
+
+  async listDisclosureDayJobs(limit = 20) {
+    return requestJson(`/api/disclosure-day/jobs?limit=${limit}`);
   },
 
   async cancelDisclosureDayJob(jobId) {
@@ -937,6 +942,80 @@ async function loadMeta() {
   );
 }
 
+function renderJobHistory(jobs) {
+  if (!jobs.length) {
+    jobHistory.className = "job-history empty";
+    jobHistory.replaceChildren(document.createTextNode("尚无扫描历史"));
+    return;
+  }
+  jobHistory.className = "job-history";
+  const list = document.createElement("div");
+  list.className = "history-list";
+  for (const job of jobs) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "history-row";
+    row.addEventListener("click", () => restoreDisclosureJob(job));
+    const title = document.createElement("span");
+    title.textContent = `${job.date || "未知日期"} · ${job.status}`;
+    const meta = document.createElement("span");
+    meta.className = "muted mono";
+    meta.textContent = `${job.processed_count || 0}/${job.total_count || "?"} · ${job.job_id}`;
+    row.append(title, meta);
+    list.append(row);
+  }
+  jobHistory.replaceChildren(list);
+}
+
+function startDisclosureJobPolling(jobId) {
+  clearInterval(state.jobPollTimer);
+  state.jobPollTimer = setInterval(() => {
+    if (state.activeJobId) {
+      pollDisclosureJob(state.activeJobId).catch((error) => {
+        clearInterval(state.jobPollTimer);
+        state.jobPollTimer = null;
+        // 轮询挂了就再也没有 finishDisclosureJob 来清 activeJobId，
+        // 这里不清的话 loadDisclosureDay 的守卫会永久拦住下一次扫描
+        state.activeJobId = null;
+        scanProgress.hide();
+        setScanState("idle");
+        setStatus({ error: error.message });
+        notify(error.message, true);
+      });
+    }
+  }, 1000);
+}
+
+function restoreDisclosureJob(job) {
+  setStatus(job);
+  if (["running", "pending"].includes(job.status)) {
+    state.activeJobId = job.job_id;
+    setScanState("scanning");
+    scanProgress.start(`恢复轮询 ${job.date || job.job_id}…`);
+    renderJobProgress(job);
+    startDisclosureJobPolling(job.job_id);
+    notify("已恢复运行中的扫描");
+    return;
+  }
+  finishDisclosureJob(job);
+  notify(job.bundle ? "已恢复历史扫描结果" : "已载入历史扫描状态", !job.bundle && job.status === "failed");
+}
+
+async function loadJobHistory() {
+  try {
+    const jobs = await api.listDisclosureDayJobs(20);
+    renderJobHistory(jobs);
+    const restorable = jobs.find((job) => ["running", "pending"].includes(job.status)) || jobs.find((job) => job.bundle);
+    if (!state.activeJobId && restorable) {
+      restoreDisclosureJob(restorable);
+    }
+  } catch (error) {
+    jobHistory.className = "job-history empty";
+    jobHistory.replaceChildren(document.createTextNode(error.message));
+    setStatus({ error: error.message });
+  }
+}
+
 function renderJobProgress(job) {
   const name = job.current_name || displayName(job.current_ts_code) || job.current_ts_code || "等待公司";
   const count = `${job.processed_count}/${job.total_count || "?"}`;
@@ -945,6 +1024,7 @@ function renderJobProgress(job) {
   el("progress-elapsed").textContent = `${Number(job.elapsed_seconds || 0).toFixed(1)}s`;
   setStatus(job);
 }
+
 
 function finishDisclosureJob(job) {
   clearInterval(state.jobPollTimer);
@@ -995,22 +1075,7 @@ async function loadDisclosureDay(date) {
       finishDisclosureJob(job);
       return;
     }
-    clearInterval(state.jobPollTimer);
-    state.jobPollTimer = setInterval(() => {
-      if (state.activeJobId) {
-        pollDisclosureJob(state.activeJobId).catch((error) => {
-          clearInterval(state.jobPollTimer);
-          state.jobPollTimer = null;
-          // 轮询挂了就再也没有 finishDisclosureJob 来清 activeJobId，
-          // 这里不清的话 loadDisclosureDay 的守卫会永久拦住下一次扫描
-          state.activeJobId = null;
-          scanProgress.hide();
-          setScanState("idle");
-          setStatus({ error: error.message });
-          notify(error.message, true);
-        });
-      }
-    }, 1000);
+    startDisclosureJobPolling(job.job_id);
   } catch (error) {
     scanProgress.hide();
     setScanState("idle");
@@ -1157,6 +1222,7 @@ sendFeishuButton.addEventListener("click", confirmSendFeishu);
 el("cancel-feishu").addEventListener("click", () => feishuDialog.close());
 el("close-dialog").addEventListener("click", () => evidenceDialog.close());
 
+el("refresh-job-history").addEventListener("click", loadJobHistory);
 el("poll-rss").addEventListener("click", async () => {
   try {
     const result = await api.pollRss();
@@ -1209,6 +1275,7 @@ async function boot() {
   renderCards();
   renderReview();
   loadQuarterly();
+  loadJobHistory();
   await applyRoute();
 }
 

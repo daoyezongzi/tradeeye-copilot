@@ -2,6 +2,31 @@
 
 ## 2026-07-31
 
+### 阶段归档：前端 job history 与刷新恢复
+
+本阶段完成前端 Spec 2，把此前后端已就绪的披露日 job history 接到工作台开发者区：
+
+- 开发者折叠区新增「扫描历史」块，包含 `refresh-job-history` 刷新按钮与 `job-history` 历史列表。
+- 前端新增 `api.listDisclosureDayJobs(limit)`，调用 `GET /api/disclosure-day/jobs?limit=20`。
+- 新增 `renderJobHistory()` 渲染最近 job；每条历史可点击恢复。
+- 新增 `restoreDisclosureJob()`：运行中 job 恢复轮询；已完成且带 bundle 的 job 恢复汇总、卡片与诊断。
+- 抽出 `startDisclosureJobPolling()`，让新扫描与恢复扫描共用同一套轮询失败清理逻辑，保持 `activeJobId` 终止路径不变量。
+- 启动时调用 `loadJobHistory()`，刷新页面后自动恢复最近运行中 job 或最近可展示 bundle。
+
+验证：
+
+```bash
+python -m pytest tests/test_frontend_productization.py tests/test_frontend_contracts.py tests/test_frontend_diagnostics.py -q --basetemp=.pytest_tmp
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+21 passed
+165 passed
+```
+
 ### 阶段归档：复核到评估回流接口
 
 本阶段继续做纯后端闭环，把已落库的 `review_labels` 接到 precision 评估与导出接口，便于前端迁移复核状态后立即看到规则质量反馈：
@@ -164,7 +189,7 @@ python -m pytest -q --basetemp=.pytest_tmp
 | Spec | 主题 | 覆盖待办 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
 | 1 | 扫描入口与信息架构收口 | 合并扫描入口、弱化扫描诊断、整理高级入口、清理遗留 wrapper | 无 | **已落地**（见上文 Spec 1 归档） |
-| 2 | job 恢复与 history | 补 job 恢复 UI | job 列表接口 | 后端已就绪，前端未开始，无 spec/plan |
+| 2 | job 恢复与 history | 补 job 恢复 UI | job 列表接口 | **已落地**（见上文 Spec 2 归档） |
 | 3 | 复核状态后端化 | 复核状态后端化、后端导出接口 | 持久层与路由 | 后端已就绪，前端未开始，无 spec/plan |
 | 4 | 飞书卡片化 | 飞书 interactive card + callback | 卡片渲染与 callback 路由 | callback 侧已就绪，卡片渲染未做，前端未开始，无 spec/plan |
 
@@ -184,7 +209,7 @@ Spec 1 完成时的接口就绪情况——后端在前端做 Spec 1 期间并�
 
 | Spec | 后端接口 | 前端现状 | UI 改动量 |
 | --- | --- | --- | --- |
-| 2 | `GET /api/disclosure-day/jobs`、`list_recent()` 已就绪 | 零调用，刷新即丢 job | 中：需 job 历史入口 + 恢复逻辑 |
+| 2 | `GET /api/disclosure-day/jobs`、`list_recent()` 已接入 | 开发者区已有扫描历史，可刷新与恢复运行中/已完成 job | 已完成 |
 | 3 | `POST/GET /api/reviews/labels`、`GET /api/reviews/labels.csv` 已就绪 | 复核仍走 localStorage（`web/app.js:779`、`:786`），导出仍是前端内存生成 | 小到中：复核队列改走接口，导出项改指后端 URL |
 | 4 | callback、verification token、`PUBLIC_BASE_URL`、通知日志、发送幂等均已就绪 | 仍是文本预览/发送 | 小：预览展示卡片结构 |
 

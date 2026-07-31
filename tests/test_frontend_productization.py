@@ -42,6 +42,18 @@ def test_advanced_sections_are_collapsed_disclosures(html, css):
     assert ".fold {" in css
 
 
+def test_job_history_has_refresh_and_restore_controls(html, js):
+    assert 'id="job-history"' in html
+    assert 'id="refresh-job-history"' in html
+    assert "listDisclosureDayJobs" in js
+    assert "renderJobHistory" in js
+    assert "loadJobHistory" in js
+    assert "restoreDisclosureJob" in js
+    assert "/api/disclosure-day/jobs?limit=" in js
+    assert 'el("refresh-job-history").addEventListener("click", loadJobHistory)' in js
+    assert "loadJobHistory();" in js
+
+
 def test_feishu_preview_requires_send_confirmation(html, js):
     assert 'id="feishu-dialog"' in html
     assert 'id="feishu-preview-text"' in html
