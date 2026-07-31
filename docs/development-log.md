@@ -2,6 +2,29 @@
 
 ## 2026-07-31
 
+### 披露日扫描 job SQLite 持久化
+
+在实时进度与停止能力之上，把 job 状态从纯内存升级为 SQLite 持久化：
+
+- 新增 `SQLiteDisclosureJobStore`，复用应用 SQLite 路径，建表 `disclosure_jobs`。
+- 持久化字段包括 `job_id / date / status / cancel_requested / started_at / payload`。
+- `payload` 保存完整 `DisclosureJobStatus`，包含当前公司、当前阶段、进度、日志与最终 partial/full bundle。
+- `cancel_requested` 单独落列，服务重启后仍能恢复取消标记。
+- `RealReportService` 已从内存 `DisclosureJobStore` 切换到 `SQLiteDisclosureJobStore`，demo app 仍保持内存态。
+- 用 wall-clock `time()` 记录 `started_at`，避免 `monotonic()` 跨进程恢复后失真。
+
+验证：
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+144 passed
+```
+
 ### 披露日扫描实时进度与停止
 
 把披露日扫描从“一次长请求等全部 Tushare 拉完”改为可观察、可停止的 job 流程：
