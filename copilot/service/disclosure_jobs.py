@@ -1,4 +1,6 @@
-from time import monotonic
+from pathlib import Path
+import sqlite3
+from time import time
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -35,12 +37,12 @@ class DisclosureJobStore:
         job_id = uuid4().hex
         status = DisclosureJobStatus(job_id=job_id, date=date, status="running")
         self._jobs[job_id] = status
-        self._started_at[job_id] = monotonic()
+        self._started_at[job_id] = time()
         return status
 
     def get(self, job_id: str) -> DisclosureJobStatus:
         status = self._jobs[job_id]
-        status.elapsed_seconds = round(monotonic() - self._started_at[job_id], 1)
+        status.elapsed_seconds = round(time() - self._started_at[job_id], 1)
         return status
 
     def set_active(self, job_id: str | None) -> None:
@@ -131,3 +133,100 @@ class DisclosureJobStore:
         if event.message:
             parts.append(event.message)
         return " ".join(parts)
+
+
+class SQLiteDisclosureJobStore(DisclosureJobStore):
+    def __init__(self, path: str | Path, company_names: dict[str, str] | None = None):
+        super().__init__(company_names=company_names)
+        self.path = Path(path)
+
+    def _connect(self) -> sqlite3.Connection:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(self.path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def init_schema(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS disclosure_jobs (
+                    job_id TEXT PRIMARY KEY,
+                    date TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    cancel_requested INTEGER NOT NULL,
+                    started_at REAL NOT NULL,
+                    payload TEXT NOT NULL
+                )
+                """
+            )
+
+    def start(self, date: str) -> DisclosureJobStatus:
+        status = super().start(date)
+        self._persist(status)
+        return status
+
+    def get(self, job_id: str) -> DisclosureJobStatus:
+        if job_id not in self._jobs:
+            self._load(job_id)
+        return super().get(job_id)
+
+    def apply_progress(self, job_id: str, event: DisclosureProgressEvent | None = None, **values) -> DisclosureJobStatus:
+        status = super().apply_progress(job_id, event, **values)
+        self._persist(status)
+        return status
+
+    def request_cancel(self, job_id: str) -> DisclosureJobStatus:
+        status = super().request_cancel(job_id)
+        self._persist(status)
+        return status
+
+    def mark_completed(self, job_id: str, bundle: DisclosureAnalysisBundle) -> DisclosureJobStatus:
+        status = super().mark_completed(job_id, bundle)
+        self._persist(status)
+        return status
+
+    def mark_cancelled(self, job_id: str, bundle: DisclosureAnalysisBundle) -> DisclosureJobStatus:
+        status = super().mark_cancelled(job_id, bundle)
+        self._persist(status)
+        return status
+
+    def mark_failed(self, job_id: str, message: str) -> DisclosureJobStatus:
+        status = super().mark_failed(job_id, message)
+        self._persist(status)
+        return status
+
+    def _persist(self, status: DisclosureJobStatus) -> None:
+        self.init_schema()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO disclosure_jobs (job_id, date, status, cancel_requested, started_at, payload)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    date = excluded.date,
+                    status = excluded.status,
+                    cancel_requested = excluded.cancel_requested,
+                    started_at = excluded.started_at,
+                    payload = excluded.payload
+                """,
+                (
+                    status.job_id,
+                    status.date,
+                    status.status,
+                    1 if status.job_id in self._cancel_requested else 0,
+                    self._started_at[status.job_id],
+                    status.model_dump_json(),
+                ),
+            )
+
+    def _load(self, job_id: str) -> None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT payload, started_at, cancel_requested FROM disclosure_jobs WHERE job_id = ?", (job_id,)).fetchone()
+        if row is None:
+            raise KeyError(job_id)
+        status = DisclosureJobStatus.model_validate_json(row["payload"])
+        self._jobs[job_id] = status
+        self._started_at[job_id] = row["started_at"]
+        if row["cancel_requested"]:
+            self._cancel_requested.add(job_id)
