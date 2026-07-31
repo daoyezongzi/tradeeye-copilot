@@ -5,6 +5,7 @@ from copilot.notify.feishu import render_formal_disclosure_text
 from copilot.report.builder import build_company_card, build_quarterly_review
 from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult, CompanyAnalysisStatus
+from copilot.service.disclosure_jobs import DisclosureJobStore
 from copilot.service.disclosure_scan import build_analysis_bundle
 
 DEMO_DATE = "20250821"
@@ -118,6 +119,7 @@ class DemoReportService:
         self.bundle = build_analysis_bundle(date=DEMO_DATE, coverage_count=len(COMPANY_NAMES), results=self.results)
         self.summary = self.bundle.summary
         self.cards = {(card.ts_code, card.period): card for card in self.summary.cards}
+        self.job_store = DisclosureJobStore(company_names=COMPANY_NAMES)
         first_finding = self.summary.cards[0].findings[0]
         self.quarterly = build_quarterly_review(
             BacktestSummary(
@@ -178,6 +180,20 @@ class DemoReportService:
 
     def scan_disclosure_day(self, date):
         return self.analyze_disclosure_day_bundle(date).scan
+
+    def start_disclosure_day_job(self, date):
+        return self.job_store.start(date)
+
+    def run_disclosure_day_job(self, job_id):
+        job = self.job_store.get(job_id)
+        bundle = self.analyze_disclosure_day_bundle(job.date)
+        return self.job_store.mark_completed(job.job_id, bundle)
+
+    def get_disclosure_day_job(self, job_id):
+        return self.job_store.get(job_id)
+
+    def cancel_disclosure_day_job(self, job_id):
+        return self.job_store.request_cancel(job_id)
 
     def poll_rss(self):
         return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])

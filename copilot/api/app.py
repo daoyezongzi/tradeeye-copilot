@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -39,6 +39,23 @@ class FeishuPreview(BaseModel):
     reason: str
 
 
+class DisclosureJobStatus(BaseModel):
+    job_id: str
+    date: str
+    status: str
+    processed_count: int
+    total_count: int
+    ok_count: int
+    data_problem_count: int
+    current_ts_code: str | None = None
+    current_name: str | None = None
+    current_period: str | None = None
+    current_stage: str
+    elapsed_seconds: float
+    logs: list[str]
+    bundle: DisclosureAnalysisBundle | None = None
+
+
 class ReportService(Protocol):
     def get_company_card(self, ts_code: str, period: str) -> CompanyCard | None: ...
 
@@ -57,6 +74,14 @@ class ReportService(Protocol):
     def scan_disclosure_day(self, date: str) -> DisclosureScanResult: ...
 
     def analyze_disclosure_day_bundle(self, date: str) -> DisclosureAnalysisBundle: ...
+
+    def start_disclosure_day_job(self, date: str) -> DisclosureJobStatus: ...
+
+    def run_disclosure_day_job(self, job_id: str) -> DisclosureJobStatus: ...
+
+    def get_disclosure_day_job(self, job_id: str) -> DisclosureJobStatus: ...
+
+    def cancel_disclosure_day_job(self, job_id: str) -> DisclosureJobStatus: ...
 
     def poll_rss(self) -> RssPollResult: ...
 
@@ -112,6 +137,21 @@ def create_app(report_service: ReportService) -> FastAPI:
     @app.post("/api/disclosure-day/bundle", response_model=DisclosureAnalysisBundle)
     def disclosure_day_bundle(request: AnalyzeDisclosureDayRequest):
         return report_service.analyze_disclosure_day_bundle(request.date)
+
+    @app.post("/api/disclosure-day/jobs", response_model=DisclosureJobStatus)
+    def start_disclosure_day_job(request: AnalyzeDisclosureDayRequest, background_tasks: BackgroundTasks):
+        job = report_service.start_disclosure_day_job(request.date)
+        job_id = job.job_id if hasattr(job, "job_id") else job["job_id"]
+        background_tasks.add_task(report_service.run_disclosure_day_job, job_id)
+        return job
+
+    @app.get("/api/disclosure-day/jobs/{job_id}", response_model=DisclosureJobStatus)
+    def get_disclosure_day_job(job_id: str):
+        return report_service.get_disclosure_day_job(job_id)
+
+    @app.post("/api/disclosure-day/jobs/{job_id}/cancel", response_model=DisclosureJobStatus)
+    def cancel_disclosure_day_job(job_id: str):
+        return report_service.cancel_disclosure_day_job(job_id)
 
     @app.post("/api/rss/poll", response_model=RssPollResult)
     def poll_rss():

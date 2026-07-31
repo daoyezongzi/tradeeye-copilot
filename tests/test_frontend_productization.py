@@ -125,6 +125,19 @@ def test_report_period_is_a_bounded_select(html, js):
     assert "function ensurePeriodOption(period)" in js
 
 
+def test_disclosure_scan_uses_cancellable_job_polling(html, js):
+    assert 'id="stop-disclosure-scan"' in html
+    assert "/api/disclosure-day/jobs" in js
+    assert "startDisclosureDayJob(date)" in js
+    assert "getDisclosureDayJob(jobId)" in js
+    assert "cancelDisclosureDayJob(jobId)" in js
+    assert "pollDisclosureJob" in js
+    assert "renderJobProgress" in js
+    assert "current_ts_code" in js
+    assert "current_stage" in js
+    assert "stopDisclosureScan" in js
+
+
 def test_summary_renders_severity_distribution(html, js, css):
     assert 'id="summary-distribution"' in html
     assert 'class="overview"' in html

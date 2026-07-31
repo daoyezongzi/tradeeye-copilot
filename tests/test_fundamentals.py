@@ -1,6 +1,7 @@
 import pandas as pd
+import pytest
 
-from copilot.datasource.fundamentals import normalize_financial_snapshot
+from copilot.datasource.fundamentals import TushareFundamentalsClient, TushareFetchCancelled, normalize_financial_snapshot
 
 
 def test_normalize_financial_snapshot_combines_four_tables():
@@ -31,6 +32,8 @@ def test_normalize_financial_snapshot_combines_four_tables():
     assert snapshot.inventory == 15.0
 
 
+
+
 def test_normalize_financial_snapshot_keeps_missing_optional_fields_as_none():
     empty = pd.DataFrame()
     income = pd.DataFrame([
@@ -42,3 +45,59 @@ def test_normalize_financial_snapshot_keeps_missing_optional_fields_as_none():
     assert snapshot.accounts_receivable is None
     assert snapshot.inventory is None
     assert snapshot.operating_cash_flow is None
+
+
+class ProgressProApi:
+    def __init__(self):
+        self.calls = []
+
+    def income(self, **kwargs):
+        self.calls.append("income")
+        return pd.DataFrame([
+            {"ts_code": kwargs["ts_code"], "end_date": kwargs["period"], "ann_date": "20250821", "revenue": 100.0, "n_income_attr_p": 10.0}
+        ])
+
+    def balancesheet(self, **kwargs):
+        self.calls.append("balancesheet")
+        return pd.DataFrame([{"ts_code": kwargs["ts_code"], "end_date": kwargs["period"], "accounts_receiv": 20.0, "inventories": 15.0}])
+
+    def cashflow(self, **kwargs):
+        self.calls.append("cashflow")
+        return pd.DataFrame([{"ts_code": kwargs["ts_code"], "end_date": kwargs["period"], "n_cashflow_act": 8.0}])
+
+    def fina_indicator(self, **kwargs):
+        self.calls.append("fina_indicator")
+        return pd.DataFrame([{"ts_code": kwargs["ts_code"], "end_date": kwargs["period"], "grossprofit_margin": 30.0, "profit_dedt": 9.0}])
+
+
+def test_tushare_client_reports_table_fetch_progress():
+    stages = []
+    client = TushareFundamentalsClient(ProgressProApi(), progress_callback=lambda stage, ts_code, period: stages.append((stage, ts_code, period)))
+
+    snapshot = client.fetch_snapshot("000001.SZ", "20250630")
+
+    assert snapshot.revenue == 100.0
+    assert stages == [
+        ("fetch_income", "000001.SZ", "20250630"),
+        ("fetch_balancesheet", "000001.SZ", "20250630"),
+        ("fetch_cashflow", "000001.SZ", "20250630"),
+        ("fetch_indicator", "000001.SZ", "20250630"),
+    ]
+
+
+def test_tushare_client_stops_between_table_fetches_when_cancelled():
+    stages = []
+
+    def progress(stage, ts_code, period):
+        stages.append(stage)
+
+    client = TushareFundamentalsClient(
+        ProgressProApi(),
+        progress_callback=progress,
+        should_cancel=lambda: "fetch_income" in stages,
+    )
+
+    with pytest.raises(TushareFetchCancelled):
+        client.fetch_snapshot("000001.SZ", "20250630")
+
+    assert stages == ["fetch_income"]

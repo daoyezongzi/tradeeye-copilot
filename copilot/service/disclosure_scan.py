@@ -12,6 +12,17 @@ class CompanyAnalysisStatus(StrEnum):
     ERROR = "ERROR"
 
 
+class DisclosureProgressEvent(BaseModel):
+    stage: str
+    processed_count: int
+    total_count: int
+    ts_code: str | None = None
+    period: str | None = None
+    industry: str | None = None
+    status: CompanyAnalysisStatus | None = None
+    message: str | None = None
+
+
 class DisclosureScanEvent(BaseModel):
     ts_code: str
     period: str

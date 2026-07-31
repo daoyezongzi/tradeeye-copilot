@@ -5,12 +5,13 @@ from pydantic import BaseModel
 from copilot.checks.reconcile import CheckStatus, run_hard_checks
 from copilot.config import RuleThresholds
 from copilot.context import assemble_context, prior_quarter_period, prior_year_period
+from copilot.datasource.fundamentals import TushareFetchCancelled
 from copilot.industry import industry_for_ts_code
 from copilot.models import PeriodSnapshot
 from copilot.observability import RuntimeStats
 from copilot.report.builder import CompanyCard, DailySummary, build_company_card
 from copilot.rules.registry import build_rules, run_rules
-from copilot.service.disclosure_scan import CompanyAnalysisStatus, DisclosureAnalysisBundle, DisclosureScanResult, build_analysis_bundle
+from copilot.service.disclosure_scan import CompanyAnalysisStatus, DisclosureAnalysisBundle, DisclosureProgressEvent, DisclosureScanResult, build_analysis_bundle
 
 
 class FundamentalsProvider(Protocol):
@@ -95,18 +96,56 @@ class AnalyzerService:
             self.store.replace_findings(ts_code, period, findings)
             card = build_company_card(ctx, findings)
             return CompanyAnalysisResult(status=CompanyAnalysisStatus.OK, message="ok", card=card)
+        except TushareFetchCancelled:
+            raise
         except Exception as exc:
             return CompanyAnalysisResult(status=CompanyAnalysisStatus.ERROR, message=str(exc))
 
-    def analyze_disclosure_day_bundle(self, date: str) -> DisclosureAnalysisBundle:
+    def analyze_disclosure_day_bundle(self, date: str, progress_callback=None, should_cancel=None) -> DisclosureAnalysisBundle:
         if self.calendar is None:
             return build_analysis_bundle(date, coverage_count=len(self.coverage_pool), results=[])
         events = self.calendar.fetch_events(date, set(self.coverage_pool))
+        total_count = len(events)
+        if progress_callback is not None:
+            progress_callback(DisclosureProgressEvent(stage="events_loaded", processed_count=0, total_count=total_count))
         results = []
         for event in events:
-            result = self.analyze_company(event.ts_code, event.period)
+            if should_cancel is not None and should_cancel():
+                if progress_callback is not None:
+                    progress_callback(DisclosureProgressEvent(stage="cancelled", processed_count=len(results), total_count=total_count))
+                break
             industry = industry_for_ts_code(event.ts_code, self.company_industries).value
+            if progress_callback is not None:
+                progress_callback(
+                    DisclosureProgressEvent(
+                        stage="company_started",
+                        processed_count=len(results),
+                        total_count=total_count,
+                        ts_code=event.ts_code,
+                        period=event.period,
+                        industry=industry,
+                    )
+                )
+            try:
+                result = self.analyze_company(event.ts_code, event.period)
+            except TushareFetchCancelled:
+                if progress_callback is not None:
+                    progress_callback(DisclosureProgressEvent(stage="cancelled", processed_count=len(results), total_count=total_count))
+                break
             results.append((event.ts_code, event.period, industry, result))
+            if progress_callback is not None:
+                progress_callback(
+                    DisclosureProgressEvent(
+                        stage="company_completed",
+                        processed_count=len(results),
+                        total_count=total_count,
+                        ts_code=event.ts_code,
+                        period=event.period,
+                        industry=industry,
+                        status=result.status,
+                        message=result.message,
+                    )
+                )
         return build_analysis_bundle(date=date, coverage_count=len(self.coverage_pool), results=results)
 
     def analyze_disclosure_day(self, date: str) -> DailySummary:

@@ -37,11 +37,17 @@ def normalize_financial_snapshot(
     )
 
 
+class TushareFetchCancelled(RuntimeError):
+    pass
+
+
 class TushareFundamentalsClient:
-    def __init__(self, pro_api, max_retries: int = 3, sleep_seconds: float = 0.5):
+    def __init__(self, pro_api, max_retries: int = 3, sleep_seconds: float = 0.5, progress_callback=None, should_cancel=None):
         self.pro_api = pro_api
         self.max_retries = max_retries
         self.sleep_seconds = sleep_seconds
+        self.progress_callback = progress_callback
+        self.should_cancel = should_cancel
 
     def _call(self, fn: Callable, **kwargs) -> pd.DataFrame:
         last_error: Exception | None = None
@@ -57,8 +63,15 @@ class TushareFundamentalsClient:
 
     def fetch_snapshot(self, ts_code: str, period: str) -> PeriodSnapshot:
         params = {"ts_code": ts_code, "period": period}
-        income = self._call(self.pro_api.income, **params)
-        balancesheet = self._call(self.pro_api.balancesheet, **params)
-        cashflow = self._call(self.pro_api.cashflow, **params)
-        indicator = self._call(self.pro_api.fina_indicator, **params)
+        income = self._fetch_table("fetch_income", self.pro_api.income, **params)
+        balancesheet = self._fetch_table("fetch_balancesheet", self.pro_api.balancesheet, **params)
+        cashflow = self._fetch_table("fetch_cashflow", self.pro_api.cashflow, **params)
+        indicator = self._fetch_table("fetch_indicator", self.pro_api.fina_indicator, **params)
         return normalize_financial_snapshot(ts_code, period, income, balancesheet, cashflow, indicator)
+
+    def _fetch_table(self, stage: str, fn: Callable, **kwargs) -> pd.DataFrame:
+        if self.should_cancel is not None and self.should_cancel():
+            raise TushareFetchCancelled("tushare fetch cancelled")
+        if self.progress_callback is not None:
+            self.progress_callback(stage, kwargs["ts_code"], kwargs["period"])
+        return self._call(fn, **kwargs)

@@ -10,6 +10,7 @@ from copilot.notify.feishu import FeishuNotifier, render_formal_disclosure_text,
 from copilot.report.builder import build_daily_summary, build_quarterly_review
 from copilot.rss.service import RssPollResult, RssPollService
 from copilot.service.analyzer import AnalyzerService
+from copilot.service.disclosure_jobs import DisclosureJobStore
 from copilot.service.report_cache import ReportCache
 from copilot.store.sqlite import SQLiteStore
 
@@ -18,6 +19,7 @@ class RealReportService:
     def __init__(self):
         self.settings = load_settings()
         self.cache = ReportCache()
+        self.job_store = DisclosureJobStore(company_names=getattr(self.settings.eval, "company_names", {}))
         self.store = SQLiteStore(self.settings.database.path)
         self.store.init_schema()
         try:
@@ -27,7 +29,12 @@ class RealReportService:
         self.analyzer = None
         if pro is not None:
             self.analyzer = AnalyzerService(
-                fundamentals=TushareFundamentalsClient(pro, max_retries=self.settings.tushare.max_retries),
+                fundamentals=TushareFundamentalsClient(
+                    pro,
+                    max_retries=self.settings.tushare.max_retries,
+                    progress_callback=self.job_store.apply_table_progress,
+                    should_cancel=self.job_store.active_should_cancel,
+                ),
                 store=self.store,
                 thresholds=self.settings.rules.thresholds,
                 coverage_pool=self.settings.eval.coverage_pool,
@@ -95,10 +102,42 @@ class RealReportService:
         if self.analyzer is None:
             raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
         bundle = self.analyzer.analyze_disclosure_day_bundle(date)
+        self._cache_bundle(bundle)
+        return bundle
+
+    def _cache_bundle(self, bundle):
         for card in bundle.summary.cards:
             self.cache.put_company(card)
         self.cache.put_daily(bundle.summary)
-        return bundle
+
+    def start_disclosure_day_job(self, date):
+        if self.analyzer is None:
+            raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
+        return self.job_store.start(date)
+
+    def run_disclosure_day_job(self, job_id):
+        job = self.job_store.get(job_id)
+        self.job_store.set_active(job_id)
+        try:
+            bundle = self.analyzer.analyze_disclosure_day_bundle(
+                job.date,
+                progress_callback=lambda event: self.job_store.apply_progress(job_id, event),
+                should_cancel=lambda: self.job_store.should_cancel(job_id),
+            )
+            self._cache_bundle(bundle)
+            if self.job_store.should_cancel(job_id):
+                return self.job_store.mark_cancelled(job_id, bundle)
+            return self.job_store.mark_completed(job_id, bundle)
+        except Exception as exc:
+            return self.job_store.mark_failed(job_id, str(exc))
+        finally:
+            self.job_store.set_active(None)
+
+    def get_disclosure_day_job(self, job_id):
+        return self.job_store.get(job_id)
+
+    def cancel_disclosure_day_job(self, job_id):
+        return self.job_store.request_cancel(job_id)
 
     def analyze_disclosure_day(self, date):
         return self.analyze_disclosure_day_bundle(date).summary

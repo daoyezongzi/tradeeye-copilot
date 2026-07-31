@@ -29,6 +29,7 @@ const feishuPreviewText = el("feishu-preview-text");
 const feishuPreviewMeta = el("feishu-preview-meta");
 const feishuPreviewHint = el("feishu-preview-hint");
 const sendFeishuButton = el("send-feishu");
+const stopDisclosureScanButton = el("stop-disclosure-scan");
 
 const snackbar = el("snackbar");
 const snackbarText = el("snackbar-text");
@@ -49,6 +50,8 @@ const state = {
   bundle: null,
   filter: "all",
   previewDate: null,
+  activeJobId: null,
+  jobPollTimer: null,
   reviewLabels: loadReviewLabels(),
 };
 
@@ -162,6 +165,22 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ date }),
     });
+  },
+
+  async startDisclosureDayJob(date) {
+    return requestJson("/api/disclosure-day/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+    });
+  },
+
+  async getDisclosureDayJob(jobId) {
+    return requestJson(`/api/disclosure-day/jobs/${jobId}`);
+  },
+
+  async cancelDisclosureDayJob(jobId) {
+    return requestJson(`/api/disclosure-day/jobs/${jobId}/cancel`, { method: "POST" });
   },
 
   async previewFeishuDisclosureDay(date) {
@@ -925,19 +944,72 @@ async function loadMeta() {
   );
 }
 
-async function loadDisclosureDay(date) {
-  const startedAt = scanProgress.start(`正在分析 ${date} 覆盖池披露公司…`);
-  try {
-    const bundle = await api.disclosureDayBundle(date);
-    const seconds = scanProgress.stop(startedAt, `已完成 ${bundle.scan.disclosed_count} 家分析`);
-    state.bundle = bundle;
-    setStatus(bundle);
-    renderSummary(bundle.summary, bundle.scan);
+function renderJobProgress(job) {
+  const name = job.current_name || displayName(job.current_ts_code) || job.current_ts_code || "等待公司";
+  const count = `${job.processed_count}/${job.total_count || "?"}`;
+  const stage = job.current_stage || job.status;
+  el("progress-message").textContent = `${count} · ${name} · ${stage}`;
+  el("progress-elapsed").textContent = `${Number(job.elapsed_seconds || 0).toFixed(1)}s`;
+  setStatus(job);
+}
+
+function finishDisclosureJob(job) {
+  clearInterval(state.jobPollTimer);
+  state.jobPollTimer = null;
+  state.activeJobId = null;
+  stopDisclosureScanButton.disabled = true;
+  scanProgress.stop(performance.now() - Number(job.elapsed_seconds || 0) * 1000, job.status === "cancelled" ? `已停止，完成 ${job.processed_count}/${job.total_count}` : `已完成 ${job.processed_count} 家分析`);
+  if (job.bundle) {
+    state.bundle = job.bundle;
+    renderSummary(job.bundle.summary, job.bundle.scan);
     renderCards();
-    renderDiagnostics(bundle.scan);
-    notify(`${date} 分析完成，耗时 ${seconds.toFixed(1)}s`);
+    renderDiagnostics(job.bundle.scan);
+  }
+  notify(job.status === "cancelled" ? "扫描已停止" : "扫描完成", job.status === "failed");
+}
+
+async function pollDisclosureJob(jobId) {
+  const job = await api.getDisclosureDayJob(jobId);
+  renderJobProgress(job);
+  if (["completed", "cancelled", "failed"].includes(job.status)) {
+    finishDisclosureJob(job);
+  }
+}
+
+async function stopDisclosureScan() {
+  if (!state.activeJobId) return;
+  stopDisclosureScanButton.disabled = true;
+  const job = await api.cancelDisclosureDayJob(state.activeJobId);
+  renderJobProgress(job);
+}
+
+async function loadDisclosureDay(date) {
+  scanProgress.start(`正在启动 ${date} 覆盖池扫描…`);
+  stopDisclosureScanButton.disabled = false;
+  try {
+    const job = await api.startDisclosureDayJob(date);
+    state.activeJobId = job.job_id;
+    renderJobProgress(job);
+    if (["completed", "cancelled", "failed"].includes(job.status)) {
+      finishDisclosureJob(job);
+      return;
+    }
+    clearInterval(state.jobPollTimer);
+    state.jobPollTimer = setInterval(() => {
+      if (state.activeJobId) {
+        pollDisclosureJob(state.activeJobId).catch((error) => {
+          clearInterval(state.jobPollTimer);
+          state.jobPollTimer = null;
+          scanProgress.hide();
+          stopDisclosureScanButton.disabled = true;
+          setStatus({ error: error.message });
+          notify(error.message, true);
+        });
+      }
+    }, 1000);
   } catch (error) {
     scanProgress.hide();
+    stopDisclosureScanButton.disabled = true;
     setStatus({ error: error.message });
     notify(error.message, true);
   }
@@ -1068,18 +1140,8 @@ el("scan-disclosure-day").addEventListener("click", async () => {
     notify("请先选择披露日期", true);
     return;
   }
-  const startedAt = scanProgress.start(`正在扫描 ${date} 覆盖池…`);
-  try {
-    const result = await api.scanDisclosureDay(date);
-    scanProgress.stop(startedAt, `已扫描 ${result.disclosed_count} 家`);
-    setStatus(result);
-    renderDiagnostics(result);
-    navigate("#/diagnostics");
-  } catch (error) {
-    scanProgress.hide();
-    setStatus({ error: error.message });
-    notify(error.message, true);
-  }
+  await loadDisclosureDay(date);
+  navigate("#/diagnostics");
 });
 
 el("analyze-company").addEventListener("click", () => {
@@ -1089,6 +1151,12 @@ el("analyze-company").addEventListener("click", () => {
 });
 
 el("preview-feishu").addEventListener("click", previewFeishu);
+stopDisclosureScanButton.addEventListener("click", () => {
+  stopDisclosureScan().catch((error) => {
+    setStatus({ error: error.message });
+    notify(error.message, true);
+  });
+});
 sendFeishuButton.addEventListener("click", confirmSendFeishu);
 el("cancel-feishu").addEventListener("click", () => feishuDialog.close());
 el("close-dialog").addEventListener("click", () => evidenceDialog.close());

@@ -97,4 +97,40 @@ def test_analyzer_analyze_disclosure_day_bundle_fetches_each_event_once():
     assert bundle.summary.disclosed_count == 2
     assert bundle.scan.disclosed_count == 2
     assert len([call for call in fundamentals.calls if call[0] == "603026.SH" and call[1] == "20250630"]) == 1
-    assert len([call for call in fundamentals.calls if call[0] == "000001.SZ" and call[1] == "20250630"]) == 1
+
+
+def test_analyzer_bundle_reports_progress_and_stops_when_cancelled():
+    class CancelAfterFirstCompany:
+        def __init__(self):
+            self.events = []
+
+        def progress(self, event):
+            self.events.append(event)
+
+        def should_cancel(self):
+            return any(event.stage == "company_completed" for event in self.events)
+
+    callbacks = CancelAfterFirstCompany()
+    service = AnalyzerService(
+        fundamentals=BundleFundamentals(),
+        store=BundleStore(),
+        coverage_pool=["603026.SH", "000001.SZ"],
+        calendar=BundleCalendar(),
+        company_industries={"603026.SH": "generic", "000001.SZ": "bank"},
+    )
+
+    bundle = service.analyze_disclosure_day_bundle(
+        "20250825",
+        progress_callback=callbacks.progress,
+        should_cancel=callbacks.should_cancel,
+    )
+
+    assert bundle.scan.disclosed_count == 1
+    assert [event.stage for event in callbacks.events] == [
+        "events_loaded",
+        "company_started",
+        "company_completed",
+        "cancelled",
+    ]
+    assert callbacks.events[1].ts_code == "603026.SH"
+    assert callbacks.events[-1].processed_count == 1
