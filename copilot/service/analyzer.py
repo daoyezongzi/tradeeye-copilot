@@ -7,7 +7,8 @@ from copilot.config import RuleThresholds
 from copilot.context import assemble_context, prior_quarter_period, prior_year_period
 from copilot.industry import industry_for_ts_code
 from copilot.models import PeriodSnapshot
-from copilot.report.builder import CompanyCard, DailySummary, build_company_card, build_daily_summary
+from copilot.observability import RuntimeStats
+from copilot.report.builder import CompanyCard, DailySummary, build_company_card
 from copilot.rules.registry import build_rules, run_rules
 from copilot.service.disclosure_scan import CompanyAnalysisStatus, DisclosureAnalysisBundle, DisclosureScanResult, build_analysis_bundle
 
@@ -41,6 +42,7 @@ class AnalyzerService:
         coverage_pool: list[str] | None = None,
         calendar=None,
         company_industries: dict[str, str] | None = None,
+        runtime_stats: RuntimeStats | None = None,
     ):
         self.fundamentals = fundamentals
         self.store = store
@@ -48,8 +50,11 @@ class AnalyzerService:
         self.coverage_pool = coverage_pool or []
         self.calendar = calendar
         self.company_industries = company_industries or {}
+        self.runtime_stats = runtime_stats
 
     def _fetch_and_store(self, ts_code: str, period: str) -> PeriodSnapshot:
+        if self.runtime_stats is not None:
+            self.runtime_stats.record_snapshot_fetch()
         snapshot = self.fundamentals.fetch_snapshot(ts_code, period)
         self.store.upsert_snapshot(snapshot)
         return snapshot
@@ -64,6 +69,8 @@ class AnalyzerService:
         return all(snapshot.value(field) is not None for field in self._required_current_fields(ts_code))
 
     def analyze_company(self, ts_code: str, period: str) -> CompanyAnalysisResult:
+        if self.runtime_stats is not None:
+            self.runtime_stats.record_company()
         try:
             current = self._fetch_and_store(ts_code, period)
             self._fetch_and_store(ts_code, prior_quarter_period(period))
