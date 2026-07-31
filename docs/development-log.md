@@ -2,6 +2,49 @@
 
 ## 2026-07-31
 
+### 阶段归档：正式覆盖池配置 gate 与 Tushare 规则样本复测
+
+本阶段完成 #50 的可验证部分：正式覆盖池配置质量 gate、RSS 名称同步，以及按 Tushare 实测结果决定是否新增行业规则。
+
+配置收口：
+
+- `config.yaml` 当前 100 支覆盖池、100 个公司名、100 个行业路由均完整。
+- `rss.company_names` 已同步 `eval.company_names`，RSS 标题匹配不再退回 ts_code 自身。
+- 新增 `tests/test_formal_coverage_config.py`，锁定覆盖池数量、唯一性、名称/行业完整性、RSS 名称同步。
+- `load_watchlist_yaml()` 现在拒绝未支持行业；当前只允许 `generic` / `bank`，避免误把未知行业当成已校准规则包。
+
+Tushare 实测：
+
+```text
+DATE=20250825
+COVERAGE_COUNT=100
+DISCLOSED_COUNT=100
+OK_COUNT=100
+DATA_NOT_READY_COUNT=0
+DATA_INCOMPLETE_COUNT=0
+ERROR_COUNT=0
+STATUS_BY_INDUSTRY={('generic', 'OK'): 100}
+PROBLEM_SAMPLE_COUNT=0
+```
+
+规则决策：
+
+- 本次真实样本没有出现字段缺失、行业不适配或错误分组，因此**不新增证券/保险/地产/公用事业等行业规则**。
+- 银行仍保留现有最小 hard-check 分流；真正的 NIM/NPL/拨备覆盖率/资本充足率规则需要银行样本和对应 Tushare 字段后再写。
+- 后续规则必须按“跑 Tushare 真实失败样本 → 确认字段和误报/漏报 → 写测试 → 写规则”的顺序推进。
+
+验证：
+
+```bash
+python -m pytest tests/test_formal_coverage_config.py tests/test_watchlist_loader.py tests/test_industry_routing.py -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+8 passed
+```
+
 ### 阶段归档：自动化披露扫描部署触发
 
 本阶段完成 #47 的可部署自动化触发闭环：

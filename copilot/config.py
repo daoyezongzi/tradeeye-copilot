@@ -88,4 +88,8 @@ def load_settings(path: str | Path = "config.yaml", env_path: str | Path = ".env
     data.setdefault("notify", {})["feishu_verification_token"] = os.getenv("FEISHU_VERIFICATION_TOKEN")
     data.setdefault("notify", {})["public_base_url"] = os.getenv("PUBLIC_BASE_URL")
     data.setdefault("automation", {})["trigger_token"] = os.getenv("AUTOMATION_TRIGGER_TOKEN")
+    rss = data.setdefault("rss", {})
+    eval_settings = data.setdefault("eval", {})
+    if not rss.get("company_names") and eval_settings.get("company_names"):
+        rss["company_names"] = eval_settings["company_names"]
     return Settings.model_validate(data)

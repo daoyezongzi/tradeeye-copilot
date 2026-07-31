@@ -3,6 +3,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 import yaml
 
+from copilot.industry import Industry
+
 
 class Watchlist(BaseModel):
     coverage_pool: list[str] = Field(default_factory=list)
@@ -20,4 +22,12 @@ def load_watchlist_yaml(path: str | Path) -> Watchlist:
     ]
     if missing:
         raise ValueError(f"watchlist missing name or industry for: {', '.join(missing)}")
+    supported = {Industry.GENERIC.value, Industry.BANK.value}
+    unsupported = [
+        code
+        for code in watchlist.coverage_pool
+        if watchlist.company_industries[code] not in supported
+    ]
+    if unsupported:
+        raise ValueError(f"watchlist unsupported industry for: {', '.join(unsupported)}")
     return watchlist
