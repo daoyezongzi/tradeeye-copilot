@@ -7,176 +7,192 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <header class="app-bar">
-    <div class="app-bar__brand">
-      <span class="brand-mark" aria-hidden="true">TE</span>
-      <span class="app-bar__titles">
-        <span class="app-bar__title">TradeEye Copilot</span>
-        <span class="app-bar__subtitle">A 股财报披露即时研判</span>
-      </span>
-    </div>
-    <nav class="segmented" role="tablist" aria-label="工作台视图">
-      <button role="tab" id="tab-workbench" data-view="workbench" aria-selected="true">工作台</button>
-      <button role="tab" id="tab-company" data-view="company" aria-selected="false">公司</button>
-      <button role="tab" id="tab-review" data-view="review" aria-selected="false">复核</button>
-      <button role="tab" id="tab-diagnostics" data-view="diagnostics" aria-selected="false">诊断</button>
-    </nav>
-    <div class="app-bar__spacer"></div>
-    <div class="app-bar__status" id="meta-status"></div>
-  </header>
+  <div class="app">
+    <!-- ---------- 侧栏：视图切换与运行状态 ---------- -->
+    <aside class="side">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand__titles">
+          <span class="brand__title">TradeEye</span>
+          <span class="brand__subtitle">A 股财报披露即时研判</span>
+        </span>
+      </div>
 
-  <main class="page">
-    <!-- ---------- 工作台 ---------- -->
-    <section id="view-workbench" class="view" role="tabpanel" aria-labelledby="tab-workbench">
-      <div class="surface">
-        <div class="section-head">
-          <h2>披露日研判</h2>
-          <p>输入披露日，扫描覆盖池当日实际披露公司</p>
-        </div>
-        <div class="button-row">
-          <div class="field">
-            <label for="disclosure-date">披露日期</label>
-            <!-- 日期选择器：控件值为 YYYY-MM-DD，调用接口前转成 YYYYMMDD -->
-            <input id="disclosure-date" type="date" value="2025-08-21" />
-          </div>
+      <div class="navgroup">
+        <h2>视图</h2>
+        <nav class="nav" role="tablist" aria-label="工作台视图">
+          <button role="tab" id="tab-workbench" data-view="workbench" aria-selected="true">披露日研判</button>
+          <button role="tab" id="tab-company" data-view="company" aria-selected="false">单票研判</button>
+          <button role="tab" id="tab-review" data-view="review" aria-selected="false">复核队列</button>
+          <button role="tab" id="tab-diagnostics" data-view="diagnostics" aria-selected="false">扫描诊断</button>
+        </nav>
+      </div>
+
+      <div class="side__foot" id="meta-status"></div>
+    </aside>
+
+    <div class="main">
+      <!-- ---------- 顶栏 ---------- -->
+      <header class="app-bar">
+        <h1 class="app-bar__title" id="app-bar-title">披露日研判</h1>
+        <span class="app-bar__crumb" id="app-bar-crumb"></span>
+        <span class="app-bar__spacer"></span>
+        <div class="app-bar__status">
+          <!-- 日期选择器：控件值为 YYYY-MM-DD，调用接口前转成 YYYYMMDD -->
+          <input id="disclosure-date" type="date" value="2025-08-21" aria-label="披露日期" />
           <button id="analyze-disclosure-day">生成披露日汇总</button>
-          <button id="scan-disclosure-day" class="tonal">扫描诊断</button>
-          <span class="spacer"></span>
-          <button id="preview-feishu" class="outlined">预览飞书摘要</button>
+          <button id="scan-disclosure-day" class="outlined">扫描诊断</button>
           <button id="export-menu-json" class="outlined">导出 JSON</button>
           <button id="export-menu-csv" class="outlined">导出 CSV</button>
+          <button id="preview-feishu" class="tonal">预览飞书摘要</button>
         </div>
-        <div id="scan-progress" class="progress" data-mode="indeterminate" hidden>
-          <div class="progress__track" role="progressbar" aria-label="扫描进度">
-            <div class="progress__indicator"></div>
-          </div>
-          <div class="progress__label">
-            <span id="progress-message">正在分析…</span>
-            <span id="progress-elapsed">0.0s</span>
-          </div>
-        </div>
-      </div>
+      </header>
 
-      <div class="overview" id="summary-panel">
-        <div class="overview__head">
+      <main class="page">
+        <!-- ---------- 工作台 ---------- -->
+        <section id="view-workbench" class="view" role="tabpanel" aria-labelledby="tab-workbench">
+          <div id="scan-progress" class="progress" data-mode="indeterminate" hidden>
+            <div class="progress__track" role="progressbar" aria-label="扫描进度">
+              <div class="progress__indicator"></div>
+            </div>
+            <div class="progress__label">
+              <span id="progress-message">正在分析…</span>
+              <span id="progress-elapsed">0.0s</span>
+            </div>
+          </div>
+
+          <div class="overview" id="summary-panel">
+            <div class="masthead">
+              <div class="overview__head">
+                <div>
+                  <h2 id="summary-title" class="overview__title">尚未生成披露日汇总</h2>
+                  <p id="summary-line" class="overview__sub">选择披露日后点击「生成披露日汇总」</p>
+                </div>
+                <div class="app-bar__status" id="summary-chips"></div>
+              </div>
+            </div>
+            <!-- 导语：一句话说清当日要优先追问谁 -->
+            <p class="lede" id="summary-lede" hidden></p>
+            <div class="distribution" id="summary-distribution" aria-hidden="true" hidden></div>
+            <div class="metric-grid" id="summary-metrics"></div>
+          </div>
+
           <div>
-            <h1 id="summary-title" class="overview__title">尚未生成披露日汇总</h1>
-            <p id="summary-line" class="overview__sub">选择披露日后点击「生成披露日汇总」</p>
+            <div class="section-head">
+              <h2>研判明细</h2>
+              <p>按严重度分章，点击公司行展开依据</p>
+              <div class="filter-chips" id="severity-filters">
+                <button data-filter="all" aria-pressed="true">全部</button>
+                <button data-filter="RED" aria-pressed="false">需优先追问</button>
+                <button data-filter="YELLOW" aria-pressed="false">值得留意</button>
+                <button data-filter="OK" aria-pressed="false">未见异常</button>
+                <button data-filter="DATA" aria-pressed="false">数据问题</button>
+              </div>
+            </div>
+            <div id="card-groups" class="card-groups"></div>
           </div>
-          <div class="app-bar__status" id="summary-chips"></div>
-        </div>
-        <div class="distribution" id="summary-distribution" aria-hidden="true" hidden></div>
-        <div class="metric-grid" id="summary-metrics"></div>
-      </div>
 
-      <div class="surface">
-        <div class="section-head">
-          <h2>公司卡</h2>
-          <div class="filter-chips" id="severity-filters">
-            <button data-filter="all" aria-pressed="true">全部</button>
-            <button data-filter="RED" aria-pressed="false">🔴 红色异常</button>
-            <button data-filter="YELLOW" aria-pressed="false">🟡 黄色异常</button>
-            <button data-filter="OK" aria-pressed="false">⚪ 未见异常</button>
-            <button data-filter="DATA" aria-pressed="false">⚠️ 数据问题</button>
+          <div class="colophon">
+            数据来源 Tushare 结构化财务表 · 规则为算术判定，LLM 不参与计算<br />
+            每条 finding 均可溯源至原始快照字段 · 字段不适配的行业拒绝出卡而非降级出结论
           </div>
-        </div>
-        <div id="card-groups" class="card-groups"></div>
-      </div>
-    </section>
+        </section>
 
-    <!-- ---------- 公司 ---------- -->
-    <section id="view-company" class="view" role="tabpanel" aria-labelledby="tab-company" hidden>
-      <div class="surface">
-        <div class="section-head">
-          <h2>单票研判</h2>
-          <p>指定股票代码与报告期，直接生成公司卡</p>
-        </div>
-        <div class="button-row">
-          <div class="field">
-            <label for="company-ts-code">股票代码</label>
-            <input id="company-ts-code" type="text" value="603026.SH" placeholder="000001.SZ" />
+        <!-- ---------- 公司 ---------- -->
+        <section id="view-company" class="view" role="tabpanel" aria-labelledby="tab-company" hidden>
+          <div class="surface">
+            <div class="section-head">
+              <h2>单票研判</h2>
+              <p>指定股票代码与报告期，直接生成公司卡</p>
+            </div>
+            <div class="button-row">
+              <div class="field">
+                <label for="company-ts-code">股票代码</label>
+                <input id="company-ts-code" type="text" value="603026.SH" placeholder="000001.SZ" />
+              </div>
+              <div class="field">
+                <label for="company-period">报告期</label>
+                <!-- 报告期只有四个法定季末，用下拉避免手输非法日期 -->
+                <select id="company-period"></select>
+              </div>
+              <button id="analyze-company">生成单票研判</button>
+            </div>
+            <div id="company-progress" class="progress" data-mode="indeterminate" hidden>
+              <div class="progress__track" role="progressbar" aria-label="分析进度">
+                <div class="progress__indicator"></div>
+              </div>
+              <div class="progress__label">
+                <span id="company-progress-message">正在分析…</span>
+                <span id="company-progress-elapsed">0.0s</span>
+              </div>
+            </div>
           </div>
-          <div class="field">
-            <label for="company-period">报告期</label>
-            <!-- 报告期只有四个法定季末，用下拉避免手输非法日期 -->
-            <select id="company-period"></select>
+          <div>
+            <div class="section-head">
+              <h2>公司详情</h2>
+              <p id="company-permalink-hint"></p>
+            </div>
+            <div id="company-detail"></div>
           </div>
-          <button id="analyze-company">生成单票研判</button>
-        </div>
-        <div id="company-progress" class="progress" data-mode="indeterminate" hidden>
-          <div class="progress__track" role="progressbar" aria-label="分析进度">
-            <div class="progress__indicator"></div>
-          </div>
-          <div class="progress__label">
-            <span id="company-progress-message">正在分析…</span>
-            <span id="company-progress-elapsed">0.0s</span>
-          </div>
-        </div>
-      </div>
-      <div class="surface">
-        <div class="section-head">
-          <h2>公司详情</h2>
-          <p id="company-permalink-hint"></p>
-        </div>
-        <div id="company-detail"></div>
-      </div>
-    </section>
+        </section>
 
-    <!-- ---------- 复核 ---------- -->
-    <section id="view-review" class="view" role="tabpanel" aria-labelledby="tab-review" hidden>
-      <div class="surface">
-        <div class="section-head">
-          <h2>复核状态</h2>
-          <p>标注结果保存在本地浏览器，可导出为人工复核 CSV</p>
-        </div>
-        <div class="metric-grid" id="review-metrics"></div>
-        <div class="button-row" style="margin-top: 16px">
-          <button id="export-review-csv">导出复核 CSV</button>
-          <button id="clear-review" class="outlined">清空本地标注</button>
-        </div>
-      </div>
-      <div class="surface">
-        <div class="section-head">
-          <h2>标注明细</h2>
-          <p>列结构与 eval/manual_review_template.csv 对齐</p>
-        </div>
-        <div id="review-table"></div>
-      </div>
-    </section>
+        <!-- ---------- 复核 ---------- -->
+        <section id="view-review" class="view" role="tabpanel" aria-labelledby="tab-review" hidden>
+          <div>
+            <div class="section-head">
+              <h2>复核状态</h2>
+              <p>标注结果保存在本地浏览器，可导出为人工复核 CSV</p>
+            </div>
+            <div class="metric-grid" id="review-metrics"></div>
+            <div class="button-row" style="margin-top: var(--space-4)">
+              <button id="export-review-csv">导出复核 CSV</button>
+              <button id="clear-review" class="outlined">清空本地标注</button>
+            </div>
+          </div>
+          <div>
+            <div class="section-head">
+              <h2>标注明细</h2>
+              <p>列结构与 eval/manual_review_template.csv 对齐</p>
+            </div>
+            <div id="review-table"></div>
+          </div>
+        </section>
 
-    <!-- ---------- 诊断 ---------- -->
-    <section id="view-diagnostics" class="view" role="tabpanel" aria-labelledby="tab-diagnostics" hidden>
-      <div class="surface">
-        <div class="section-head">
-          <h2>扫描诊断</h2>
-          <p>每家覆盖池公司为什么出卡或未出卡</p>
-        </div>
-        <div id="diagnostic-status"></div>
-      </div>
-      <div class="surface">
-        <div class="section-head">
-          <h2>RSS 触发</h2>
-          <p>RSS 仅作为触发提示，财务数据仍走 Tushare</p>
-        </div>
-        <div class="button-row">
-          <button id="poll-rss" class="tonal">轮询 RSS</button>
-        </div>
-      </div>
-      <div class="surface">
-        <div class="section-head">
-          <h2>披露季复盘</h2>
-        </div>
-        <div class="metric-grid" id="quarterly-review"></div>
-      </div>
-      <div class="surface">
-        <div class="section-head">
-          <h2>操作日志</h2>
-          <p>最近一次接口调用的原始返回</p>
-        </div>
-        <pre id="operation-status" class="log"></pre>
-      </div>
-    </section>
-  </main>
+        <!-- ---------- 诊断 ---------- -->
+        <section id="view-diagnostics" class="view" role="tabpanel" aria-labelledby="tab-diagnostics" hidden>
+          <div>
+            <div class="section-head">
+              <h2>扫描诊断</h2>
+              <p>每家覆盖池公司为什么出卡或未出卡</p>
+            </div>
+            <div id="diagnostic-status"></div>
+          </div>
+          <div>
+            <div class="section-head">
+              <h2>RSS 触发</h2>
+              <p>RSS 仅作为触发提示，财务数据仍走 Tushare</p>
+            </div>
+            <div class="button-row">
+              <button id="poll-rss" class="outlined">轮询 RSS</button>
+            </div>
+          </div>
+          <div>
+            <div class="section-head">
+              <h2>披露季复盘</h2>
+            </div>
+            <div class="metric-grid" id="quarterly-review"></div>
+          </div>
+          <div>
+            <div class="section-head">
+              <h2>操作日志</h2>
+              <p>最近一次接口调用的原始返回</p>
+            </div>
+            <pre id="operation-status" class="log"></pre>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
 
   <!-- ---------- 依据溯源 ---------- -->
   <dialog id="evidence-dialog">

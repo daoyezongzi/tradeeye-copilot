@@ -4,8 +4,11 @@
 
 const el = (id) => document.getElementById(id);
 
+const appBarTitle = el("app-bar-title");
+const appBarCrumb = el("app-bar-crumb");
 const summaryTitle = el("summary-title");
 const summaryLine = el("summary-line");
+const summaryLede = el("summary-lede");
 const summaryMetrics = el("summary-metrics");
 const summaryChips = el("summary-chips");
 const summaryDistribution = el("summary-distribution");
@@ -33,11 +36,12 @@ const snackbarText = el("snackbar-text");
 /* ---------- 状态 ---------- */
 
 const REVIEW_STORAGE_KEY = "tradeeye.review.labels.v1";
+/* 严重度做双重编码：颜色 + 文字标签，色盲或黑白打印下仍可分辨 */
 const SEVERITY_META = {
-  RED: { label: "红色异常", icon: "🔴", cls: "red" },
-  YELLOW: { label: "黄色异常", icon: "🟡", cls: "yellow" },
-  OK: { label: "未见异常", icon: "⚪", cls: "ok" },
-  DATA: { label: "数据问题", icon: "⚠️", cls: "data" },
+  RED: { label: "需优先追问", tag: "RED", cls: "red", note: "规则判定为红色，建议当日跟进" },
+  YELLOW: { label: "值得留意", tag: "YELLOW", cls: "yellow", note: "阈值边缘，建议结合行业对比" },
+  OK: { label: "未见异常", tag: "OK", cls: "ok", note: "6 条算术规则全部未触发" },
+  DATA: { label: "数据问题", tag: "DATA", cls: "data", note: "有披露事件但未出卡" },
 };
 
 const state = {
@@ -208,6 +212,7 @@ function createProgress(progressId, messageId, elapsedId) {
       messageEl.textContent = message;
       elapsedEl.textContent = "0.0s";
       root.hidden = false;
+      root.dataset.mode = "indeterminate";
       const startedAt = performance.now();
       clearInterval(timer);
       timer = setInterval(() => {
@@ -220,6 +225,8 @@ function createProgress(progressId, messageId, elapsedId) {
       const seconds = (performance.now() - startedAt) / 1000;
       elapsedEl.textContent = `${seconds.toFixed(1)}s`;
       messageEl.textContent = message;
+      // 完成后停掉动画并填满，否则仍在滚动的进度条会被读成还在跑
+      root.dataset.mode = "done";
       return seconds;
     },
     hide() {
@@ -249,6 +256,14 @@ function makeChip(text, cls) {
   return chip;
 }
 
+/* 依赖就绪状态：圆点 + 文字，不只靠颜色 */
+function makeStatusDot(text, ready) {
+  const node = document.createElement("span");
+  node.className = `status-dot ${ready ? "ready" : "blocked"}`;
+  node.textContent = text;
+  return node;
+}
+
 function makeEmpty(message) {
   const node = document.createElement("div");
   node.className = "empty";
@@ -256,15 +271,45 @@ function makeEmpty(message) {
   return node;
 }
 
+/* 章节头：衬线标题 + 可伸缩分隔线 + 家数，研报式分章 */
+function makeChapterHead(title, count, note) {
+  const head = document.createElement("div");
+  head.className = "card-group__head";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  head.append(heading);
+  if (note) {
+    const hint = document.createElement("span");
+    hint.className = "card-group__note";
+    hint.textContent = note;
+    head.append(hint);
+  }
+  const rule = document.createElement("span");
+  rule.className = "card-group__rule";
+  const total = document.createElement("span");
+  total.className = "mono";
+  total.textContent = count;
+  head.append(rule, total);
+  return head;
+}
+
 /* ---------- 视图路由：hash 稳定 URL ---------- */
 
 const VIEWS = ["workbench", "company", "review", "diagnostics"];
+const VIEW_TITLES = {
+  workbench: "披露日研判",
+  company: "单票研判",
+  review: "复核队列",
+  diagnostics: "扫描诊断",
+};
 
 function activateView(view) {
   for (const name of VIEWS) {
     el(`view-${name}`).hidden = name !== view;
     el(`tab-${name}`).setAttribute("aria-selected", String(name === view));
   }
+  appBarTitle.textContent = VIEW_TITLES[view] || view;
+  appBarCrumb.textContent = window.location.hash || "#/workbench";
 }
 
 function parseHash() {
@@ -333,6 +378,28 @@ function renderDistribution(counts) {
   );
 }
 
+/* 导语：把当日结论压成一句话，最值得追问的那家直接点名 */
+function renderLede(summary) {
+  const findingTotal = summary.cards.reduce((total, card) => total + card.findings.length, 0);
+  if (summary.red_count === 0 && summary.yellow_count === 0) {
+    summaryLede.textContent = `当日覆盖池 ${summary.disclosed_count} 家披露，规则未触发任何异常。`;
+    summaryLede.hidden = false;
+    return;
+  }
+
+  const lead = [...summary.cards].sort((a, b) => (b.max_score || 0) - (a.max_score || 0))[0];
+  const leadName = displayName(lead.ts_code) || lead.ts_code;
+  const bucket = summary.red_count > 0
+    ? { count: summary.red_count, word: "触发红色异常" }
+    : { count: summary.yellow_count, word: "处于阈值边缘" };
+
+  /* 拼接后写入 innerHTML，因此公司名与标题必须转义 */
+  summaryLede.innerHTML =
+    `当日 <b>${escapeHtml(String(bucket.count))} 家</b>${bucket.word}，共命中 ${findingTotal} 条规则；` +
+    `其中 <b>${escapeHtml(leadName)}</b>以「${escapeHtml(lead.findings[0]?.title || "")}」最值得优先追问。`;
+  summaryLede.hidden = false;
+}
+
 function renderSummary(summary, scan) {
   const dataProblems = scan.data_not_ready_count + scan.data_incomplete_count + scan.error_count;
 
@@ -350,6 +417,8 @@ function renderSummary(summary, scan) {
     makeChip(`固定链接 #/day/${summary.date}`)
   );
 
+  renderLede(summary);
+
   renderDistribution({
     red: summary.red_count,
     yellow: summary.yellow_count,
@@ -359,10 +428,10 @@ function renderSummary(summary, scan) {
 
   const metrics = [
     { label: "当日披露", value: summary.disclosed_count, cls: "" },
-    { label: "🔴 需优先关注", value: summary.red_count, cls: "red" },
-    { label: "🟡 留意", value: summary.yellow_count, cls: "yellow" },
-    { label: "⚪ 未见异常", value: summary.ok_count, cls: "ok" },
-    { label: "⚠️ 数据问题", value: dataProblems, cls: "" },
+    { label: "需优先追问", value: summary.red_count, cls: "red" },
+    { label: "值得留意", value: summary.yellow_count, cls: "yellow" },
+    { label: "未见异常", value: summary.ok_count, cls: "ok" },
+    { label: "数据问题", value: dataProblems, cls: "" },
   ];
 
   summaryMetrics.replaceChildren(
@@ -379,18 +448,24 @@ function renderSummary(summary, scan) {
   );
 }
 
+function makeTag(text, cls) {
+  const tag = document.createElement("span");
+  tag.className = cls ? `tag ${cls}` : "tag";
+  tag.textContent = text;
+  return tag;
+}
+
 function renderFinding(card, finding) {
+  const meta = SEVERITY_META[finding.severity] || SEVERITY_META.OK;
   const item = document.createElement("div");
-  item.className = "finding";
+  item.className = `finding ${meta.cls}`;
 
   const head = document.createElement("div");
   head.className = "finding__head";
-  const meta = SEVERITY_META[finding.severity] || SEVERITY_META.OK;
-  head.append(makeChip(`${meta.icon} ${meta.label}`, meta.cls));
   const title = document.createElement("span");
   title.className = "finding__title";
   title.textContent = finding.title;
-  head.append(title);
+  head.append(title, makeTag(`${meta.tag} · ${finding.rule_id}`, meta.cls));
 
   const detail = document.createElement("p");
   detail.className = "finding__detail";
@@ -398,12 +473,19 @@ function renderFinding(card, finding) {
 
   const foot = document.createElement("div");
   foot.className = "finding__foot";
+  /* 依据行直接列出字段与取值，点「查看依据」再看完整快照 */
+  for (const item of finding.evidence.slice(0, 3)) {
+    const cell = document.createElement("span");
+    cell.textContent = `${item.field} = ${item.value} @${item.period}`;
+    foot.append(cell);
+  }
+  const score = document.createElement("span");
+  score.textContent = `score ${finding.score.toFixed(1)}`;
   const evidenceButton = document.createElement("button");
   evidenceButton.className = "text";
   evidenceButton.textContent = "查看依据";
   evidenceButton.addEventListener("click", () => showEvidence(card, finding));
-  const scoreChip = makeChip(`score ${finding.score.toFixed(1)}`);
-  foot.append(evidenceButton, scoreChip);
+  foot.append(score, evidenceButton);
 
   item.append(head, detail, foot);
   return item;
@@ -436,45 +518,92 @@ function renderReviewActions(card) {
   return wrap;
 }
 
-function renderCard(card) {
+/* fact_line 形如「营收 12.3 亿 | 净利 1.2 亿」，拆成等宽分格，第一段是标签、其余是取值 */
+function renderFactLine(factLine) {
+  const wrap = document.createElement("div");
+  wrap.className = "card__fact";
+  for (const part of String(factLine || "").split("|")) {
+    const text = part.trim();
+    if (!text) continue;
+    const [label, ...rest] = text.split(/\s+/);
+    const cell = document.createElement("div");
+    const key = document.createElement("span");
+    key.textContent = label;
+    const value = document.createElement("b");
+    value.textContent = rest.join(" ") || "—";
+    cell.append(key, value);
+    wrap.append(cell);
+  }
+  return wrap;
+}
+
+/* 覆盖池上百家时卡片网格会变成读不完的瀑布，因此改成默认收起、点击展开的行 */
+function renderCard(card, options = {}) {
   const key = severityKey(card);
   const meta = SEVERITY_META[key];
   const node = document.createElement("article");
   node.className = `card ${meta.cls}`;
+  if (options.standalone) node.classList.add("standalone", "open");
+  if (options.open) node.classList.add("open");
 
   const head = document.createElement("div");
   head.className = "card__head";
-  const identity = document.createElement("div");
-  const name = document.createElement("div");
+  const severityBar = document.createElement("span");
+  severityBar.className = "card__sev";
+  head.append(severityBar);
+
+  if (options.rank) {
+    const rank = document.createElement("span");
+    rank.className = "card__code";
+    rank.textContent = String(options.rank).padStart(2, "0");
+    head.append(rank);
+  }
+
+  const name = document.createElement("span");
   name.className = "card__name";
   name.textContent = displayName(card.ts_code) || card.ts_code;
-  const code = document.createElement("div");
+  const code = document.createElement("span");
   code.className = "card__code";
   code.textContent = `${card.ts_code} · ${card.period}`;
-  identity.append(name, code);
-  head.append(identity, makeChip(`${meta.icon} ${meta.label}`, meta.cls));
+  const summary = document.createElement("span");
+  summary.className = "card__sum";
+  summary.textContent = card.findings[0]?.title || "规则未触发异常";
 
-  const fact = document.createElement("p");
-  fact.className = "card__fact";
-  fact.textContent = card.fact_line;
+  const push = document.createElement("span");
+  push.className = "card__push";
+  push.append(
+    makeTag(meta.tag, card.findings.length > 0 ? meta.cls : "mut"),
+    makeTag(`${card.findings.length} 条 · ${(card.max_score || 0).toFixed(0)}`, "mut")
+  );
+  if (!options.standalone) {
+    const chevron = document.createElement("span");
+    chevron.className = "card__chevron";
+    chevron.textContent = "▶";
+    push.append(chevron);
+    head.addEventListener("click", () => node.classList.toggle("open"));
+  }
+  head.append(name, code, summary, push);
+
+  const body = document.createElement("div");
+  body.className = "card__body";
+  body.append(renderFactLine(card.fact_line));
 
   const findings = document.createElement("div");
   findings.className = "findings";
   if (card.findings.length === 0) {
-    findings.append(makeEmpty("规则未触发异常"));
+    findings.append(makeEmpty(meta.note));
   } else {
     for (const finding of card.findings) {
       findings.append(renderFinding(card, finding));
     }
   }
-
-  node.append(head, fact, findings);
+  body.append(findings);
 
   if (card.attribution) {
     const attribution = document.createElement("p");
     attribution.className = "card__attribution";
     attribution.textContent = card.attribution;
-    node.append(attribution);
+    body.append(attribution);
   }
 
   const foot = document.createElement("div");
@@ -483,8 +612,9 @@ function renderCard(card) {
   permalink.href = `#/company/${card.ts_code}/${card.period}`;
   permalink.textContent = "打开公司详情";
   foot.append(permalink, renderReviewActions(card));
-  node.append(foot);
+  body.append(foot);
 
+  node.append(head, body);
   return node;
 }
 
@@ -514,41 +644,59 @@ function renderCards() {
 
   const cards = state.bundle.summary.cards;
   const problemEvents = state.bundle.scan.events.filter((event) => event.status !== "OK");
+  const byScore = (a, b) => (b.max_score || 0) - (a.max_score || 0);
   const groups = [
-    { key: "RED", cards: cards.filter((card) => severityKey(card) === "RED") },
-    { key: "YELLOW", cards: cards.filter((card) => severityKey(card) === "YELLOW") },
+    { key: "RED", cards: cards.filter((card) => severityKey(card) === "RED").sort(byScore) },
+    { key: "YELLOW", cards: cards.filter((card) => severityKey(card) === "YELLOW").sort(byScore) },
     { key: "OK", cards: cards.filter((card) => severityKey(card) === "OK") },
   ];
 
   const nodes = [];
+  let rank = 0;
+  let openedFirst = false;
   for (const group of groups) {
     if (state.filter !== "all" && state.filter !== group.key) continue;
     if (group.cards.length === 0) continue;
     const meta = SEVERITY_META[group.key];
     const section = document.createElement("section");
-    const head = document.createElement("div");
-    head.className = "card-group__head";
-    const heading = document.createElement("h3");
-    heading.textContent = `${meta.icon} ${meta.label}`;
-    head.append(heading, makeChip(`${group.cards.length} 家`, meta.cls));
-    const grid = document.createElement("div");
-    grid.className = "cards";
-    for (const card of group.cards) {
-      grid.append(renderCard(card));
+    section.append(makeChapterHead(meta.label, `${group.cards.length} 家`, meta.note));
+
+    /* 未见异常只报数量与名单，不逐条展开，避免把版面吃掉 */
+    if (group.key === "OK") {
+      const brief = document.createElement("p");
+      brief.className = "brief";
+      brief.append(document.createTextNode("规则全部未触发："));
+      group.cards.forEach((card, index) => {
+        if (index > 0) brief.append(document.createTextNode("、"));
+        const name = document.createElement("b");
+        name.textContent = displayName(card.ts_code) || card.ts_code;
+        brief.append(name);
+      });
+      brief.append(document.createTextNode("。仅汇总数量，不逐条展开。"));
+      section.append(brief);
+      nodes.push(section);
+      continue;
     }
-    section.append(head, grid);
+
+    const list = document.createElement("div");
+    list.className = "cards";
+    for (const card of group.cards) {
+      rank += 1;
+      /* 默认只展开分数最高的那一行，其余保持收起 */
+      const open = !openedFirst;
+      openedFirst = true;
+      list.append(renderCard(card, { rank, open }));
+    }
+    section.append(list);
     nodes.push(section);
   }
 
   const showProblems = (state.filter === "all" || state.filter === "DATA") && problemEvents.length > 0;
   if (showProblems) {
+    const meta = SEVERITY_META.DATA;
     const section = document.createElement("section");
-    const head = document.createElement("div");
-    head.className = "card-group__head";
-    const heading = document.createElement("h3");
-    heading.textContent = "⚠️ 数据问题";
-    head.append(heading, makeChip(`${problemEvents.length} 家`, "data"));
-    section.append(head, renderDataProblemGroup(problemEvents));
+    section.append(makeChapterHead(meta.label, `${problemEvents.length} 家`, meta.note));
+    section.append(renderDataProblemGroup(problemEvents));
     nodes.push(section);
   }
 
@@ -661,7 +809,8 @@ function renderReview() {
   reviewMetrics.replaceChildren(
     ...metrics.map((item) => {
       const node = document.createElement("div");
-      node.className = "metric";
+      // 文本型取值用较小字号，衬线大数字只留给真正的数字
+      node.className = typeof item.value === "number" ? "metric" : "metric wide";
       const label = document.createElement("span");
       label.textContent = item.label;
       const value = document.createElement("strong");
@@ -770,9 +919,9 @@ async function loadMeta() {
     return;
   }
   metaStatus.replaceChildren(
-    makeChip(`覆盖池 ${state.meta.coverage_count} 家`),
-    makeChip(state.meta.tushare_ready ? "Tushare 就绪" : "Tushare 未配置", state.meta.tushare_ready ? "ready" : "blocked"),
-    makeChip(state.meta.feishu_ready ? "飞书就绪" : "飞书未配置", state.meta.feishu_ready ? "ready" : "blocked")
+    makeStatusDot(state.meta.tushare_ready ? "Tushare 就绪" : "Tushare 未配置", state.meta.tushare_ready),
+    makeStatusDot(state.meta.feishu_ready ? "飞书就绪" : "飞书未配置", state.meta.feishu_ready),
+    makeChip(`覆盖池 ${state.meta.coverage_count} 家`)
   );
 }
 
@@ -802,7 +951,7 @@ async function loadCompany(tsCode, period) {
     setStatus(result);
     companyPermalinkHint.textContent = `固定链接 #/company/${tsCode}/${period}`;
     if (result.card) {
-      companyDetail.replaceChildren(renderCard(result.card));
+      companyDetail.replaceChildren(renderCard(result.card, { standalone: true }));
     } else {
       companyDetail.replaceChildren(makeEmpty(`${result.status}：${result.message}`));
     }
