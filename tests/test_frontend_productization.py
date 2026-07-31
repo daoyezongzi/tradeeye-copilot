@@ -88,6 +88,8 @@ def test_exports_cover_csv_and_json(html, js):
     assert 'id="export-menu-json"' not in html
     assert 'id="export-menu-mount"' in html
     assert '<script src="/components.js"></script>' in html
+    # 无 ES module，加载顺序即契约：components.js 必须先于 app.js
+    assert html.index("/components.js") < html.index("/app.js")
     assert "export-menu-csv" in js
     assert "export-menu-json" in js
     assert "createMenuButton" in js
@@ -167,9 +169,10 @@ def test_disclosure_scan_uses_cancellable_job_polling(html, js):
     assert 'id="analyze-disclosure-day"' not in html
     assert 'id="scan-disclosure-day"' not in html
     # 三处 disabled 重置收敛到一个函数
-    assert "function setScanState(state)" in js
-    assert '"scanning"' in js
-    assert '"cancelling"' in js
+    assert "function setScanState(next)" in js
+    # disabled 只有一个赋值点，锁住"收敛"这个不变量
+    assert js.count("scanButton.disabled") == 1
+    assert 'setScanState("cancelling")' in js
     assert "/api/disclosure-day/jobs" in js
     assert "startDisclosureDayJob(date)" in js
     assert "getDisclosureDayJob(jobId)" in js

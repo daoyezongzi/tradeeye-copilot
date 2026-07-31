@@ -31,6 +31,8 @@ function createMenuButton({ mount, label, items }) {
     node.id = item.id;
     node.textContent = item.label;
     node.setAttribute("role", "menuitem");
+    // 漫游焦点：Tab 不在项间穿行，只有方向键（下方 keydown）移动焦点
+    node.setAttribute("tabindex", "-1");
     node.addEventListener("click", () => {
       close();
       item.onSelect();
@@ -84,6 +86,11 @@ function createMenuButton({ mount, label, items }) {
      但它在 wrap 内，所以不会被这条误关。 */
   document.addEventListener("click", (event) => {
     if (isOpen() && !wrap.contains(event.target)) close();
+  });
+
+  /* 键盘走 Tab 移出菜单时，click 监听管不到，靠 focusout 兜底关闭 */
+  wrap.addEventListener("focusout", (event) => {
+    if (isOpen() && !wrap.contains(event.relatedTarget)) close();
   });
 
   wrap.append(trigger, list);

@@ -233,13 +233,13 @@ function createProgress(progressId, messageId, elapsedId) {
 
 /* 扫描按钮单节点三态。用两个节点互相 hide 的话，disabled 状态要在多处同步——
    之前正是漏在这里：两个 catch 分支和 finishDisclosureJob 各自手动重置了一遍。 */
-function setScanState(state) {
-  scanButton.dataset.state = state;
-  const scanning = state === "scanning" || state === "cancelling";
-  scanButton.textContent = scanning ? "停止扫描" : "开始扫描";
+function setScanState(next) {
+  scanButton.dataset.state = next;
+  const scanning = next === "scanning" || next === "cancelling";
+  scanButton.textContent = next === "cancelling" ? "停止中…" : scanning ? "停止扫描" : "开始扫描";
   scanButton.classList.toggle("outlined", scanning);
   // cancelling 期间禁用，避免重复发取消请求
-  scanButton.disabled = state === "cancelling";
+  scanButton.disabled = next === "cancelling";
 }
 
 const scanProgress = createProgress("scan-progress", "progress-message", "progress-elapsed");
@@ -972,11 +972,19 @@ async function pollDisclosureJob(jobId) {
 async function stopDisclosureScan() {
   if (!state.activeJobId) return;
   setScanState("cancelling");
-  const job = await api.cancelDisclosureDayJob(state.activeJobId);
-  renderJobProgress(job);
+  try {
+    const job = await api.cancelDisclosureDayJob(state.activeJobId);
+    renderJobProgress(job);
+  } catch (error) {
+    // 取消请求失败：作业与轮询都还活着，回滚到 scanning 让用户能再点一次取消
+    setScanState("scanning");
+    throw error;
+  }
 }
 
 async function loadDisclosureDay(date) {
+  // 已有活跃作业时不再起新的一个，防止双击/hashchange 竞态起两个作业
+  if (state.activeJobId) return;
   scanProgress.start(`正在启动 ${date} 覆盖池扫描…`);
   setScanState("scanning");
   try {

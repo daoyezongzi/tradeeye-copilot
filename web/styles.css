@@ -329,7 +329,7 @@ body {
   min-width: 168px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   padding: var(--space-1);
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--radius);
