@@ -99,6 +99,56 @@ python -m pytest -q --basetemp=.pytest_tmp
 152 passed
 ```
 
+### Spec 1 落地：扫描入口与信息架构收口
+
+对应 spec：`docs/superpowers/specs/2026-07-31-scan-entry-consolidation-design.md`
+
+已完成：
+
+- 侧栏从 4 tab 降为 3 tab，扫描诊断不再是顶级视图。
+- 「生成披露日汇总」与「扫描诊断」合并为单一「开始扫描」。两者原本调用同一条链路
+  （同一 `loadDisclosureDay()`、同一 job、同一份 bundle），差别只是最终落在哪个视图，
+  因此合并未改变任何扫描行为。
+- 扫描按钮改为单节点三态 `idle / scanning / cancelling`，扫描期间原地变「停止扫描」，
+  取消进行中显示「停止中…」，空闲态不再常驻一个永远灰着的按钮。原先分散在两个 catch 分支与
+  `finishDisclosureJob()` 中的三处 disabled 重置，收敛到 `setScanState()`。
+- 扫描诊断与开发者工具（RSS 触发 / 披露季复盘 / 原始操作日志）各成一个原生 `<details>`
+  折叠区，默认收起。两区语义分开：诊断回答业务问题「这家为何没出卡」，开发者区是系统内部状态。
+- 折叠区是 `index.html` 里的静态 `<details>` 包住原有容器，容器 id 全部未变，
+  因此 `renderDiagnostics()` / `loadQuarterly()` / `setStatus()` 一行未改。
+- `#/diagnostics` 保留为深链接：落到工作台、展开诊断区、滚动到位。扫描完成后不自动展开，
+  因为数据问题家数已在工作台「数据问题」分章报出。
+- 导出 JSON / CSV 收进顶栏「导出 ▾」菜单，新增 `web/components.js` 放这个唯一需要 JS 的原语。
+- 删除 `api.analyzeDisclosureDay` / `api.scanDisclosureDay` / `api.disclosureDayBundle`
+  三个已无调用点的 wrapper。后端对应路由保留，它们有后端测试覆盖且可能被 CLI 使用。
+
+代码评审后补修的两个真实缺陷：
+
+- `stopDisclosureScan()` 原先先置 `cancelling` 再发取消请求，请求失败时状态不回滚，
+  按钮会永久卡在 disabled、无法重试取消。改为失败时回滚到 `scanning` 后 rethrow。
+- `navigate()` 在 hash 未变时同步调 `applyRoute()`，快速双击「开始扫描」会起两个 job
+  并孤立前一个。`loadDisclosureDay()` 开头加 `state.activeJobId` 早退守卫。
+  按钮 `data-state` 不能当锁，它要等异步流程才置位。
+
+验证：
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+164 passed
+```
+
+另用 Playwright headless 验证（harness 建在仓库外，跑完删除），一次通过：console / pageerror
+为 0、侧栏 3 tab、两个折叠区默认收起且可展开、扫描按钮初始 `idle`、导出菜单点击展开且
+`aria-expanded` 同步、Esc 与 Tab 移出均可关闭、方向键在菜单项间移动、`#/diagnostics`
+深链接落到工作台展开态、空态占位文案可见、1440 / 1920 / 430px 无横向溢出。
+
+完整无障碍结论需真实读屏软件与人工评审，此处只覆盖可自动测量部分。
+
 ### 前端产品化 spec 分解
 
 把前端 8 项待办按「改动是否耦合」和「是否卡后端接口」拆成四个 spec，逐个走 spec → plan → 实施，
