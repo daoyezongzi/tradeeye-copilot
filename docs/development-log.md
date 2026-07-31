@@ -180,7 +180,37 @@ ERROR_COUNT=0
 - 该批 `20250825` 非银行样本没有触发字段缺失或行业不适配问题。
 - 银行 hard check 已先做最小分流，避免继续用毛利率、应收账款、存货字段误拒银行上下文。
 - 复测 `000001.SZ / 20250630`，在显式 `bank` 路由下已从 `DATA_NOT_READY` 变为 `OK` 并成功生成 card。
-- 这批 100 支只是烟测样本，未作为正式关注股票池提交进 `config.yaml`。
+- 这批 100 支已按用户要求写入 `config.yaml` 作为正式烟测池，后续仍应替换为真实关注股票池。
+
+### 飞书正式摘要实发验证
+
+使用正式飞书摘要路径实发一次：
+
+```text
+POST /api/notify/feishu/disclosure-day/20250825
+STATUS_CODE=200
+sent=True
+reason=ok
+```
+
+本次正式摘要规模：
+
+```text
+TEXT_CHARS=5195
+TEXT_LINES=191
+RED=69
+YELLOW=18
+DATA_PROBLEMS=0
+```
+
+结论：
+
+- 飞书正式摘要发送成功。
+- 正式摘要会发送全部红色/黄色异常公司；未见异常公司只汇总数量，不逐条展开。
+- 本次样本没有数据问题事件，因此 `DATA_PROBLEMS=0`。
+- 当前发送耗时偏长不是因为 LLM；真实卡片仍未接 LLM。
+- 耗时主因是 100 家覆盖池逐家拉 Tushare 三期四表，且正式发送路径当前会先 `analyze_disclosure_day()` 再 `scan_disclosure_day()`，存在重复分析风险。
+- 后续性能优化应改为一次 disclosure scan 复用 `CompanyAnalysisResult`，同时生成 `DailySummary` 和 diagnostics，再直接渲染飞书。
 
 ### Backend Feishu completion self-review
 
