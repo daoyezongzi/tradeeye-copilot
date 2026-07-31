@@ -103,6 +103,35 @@ def test_rendering_escapes_untrusted_values(js):
     assert ".innerHTML = `" not in js.split("function renderCard(")[1].split("function renderDataProblemGroup(")[0]
 
 
+def test_disclosure_date_uses_native_date_picker(html, js):
+    assert 'id="disclosure-date" type="date"' in html
+    # 控件值是 YYYY-MM-DD，接口与 hash 路由要求 YYYYMMDD
+    assert "function toApiDate(value)" in js
+    assert "function toInputDate(value)" in js
+    assert "function selectedDate()" in js
+    assert "el(\"disclosure-date\").value.trim()" not in js
+    assert 'input[type="date"]' in Path("web/styles.css").read_text(encoding="utf-8")
+
+
+def test_report_period_is_a_bounded_select(html, js):
+    assert '<select id="company-period">' in html
+    assert "function periodOptions(" in js
+    for suffix in ["0331", "0630", "0930", "1231"]:
+        assert suffix in js
+    # 路由带入的报告期若不在选项内也要可选中
+    assert "function ensurePeriodOption(period)" in js
+
+
+def test_summary_renders_severity_distribution(html, js, css):
+    assert 'id="summary-distribution"' in html
+    assert 'class="overview"' in html
+    assert "renderDistribution" in js
+    assert "node.style.flexGrow" in js
+    for seg in ["seg-red", "seg-yellow", "seg-ok", "seg-data"]:
+        assert seg in js
+        assert f".{seg}" in css
+
+
 def test_design_tokens_follow_material_and_apple_conventions(css):
     for token in [
         "--md-sys-color-primary",

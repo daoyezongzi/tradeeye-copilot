@@ -7,6 +7,8 @@ const el = (id) => document.getElementById(id);
 const summaryTitle = el("summary-title");
 const summaryLine = el("summary-line");
 const summaryMetrics = el("summary-metrics");
+const summaryChips = el("summary-chips");
+const summaryDistribution = el("summary-distribution");
 const cardGroups = el("card-groups");
 const companyDetail = el("company-detail");
 const companyPermalinkHint = el("company-permalink-hint");
@@ -45,6 +47,70 @@ const state = {
   previewDate: null,
   reviewLabels: loadReviewLabels(),
 };
+
+/* ---------- 日期与报告期 ---------- */
+
+/* 后端与 hash URL 一律用 YYYYMMDD；<input type="date"> 只接受 YYYY-MM-DD，因此在边界转换 */
+function toApiDate(value) {
+  return String(value ?? "").replace(/-/g, "").trim();
+}
+
+function toInputDate(value) {
+  const digits = toApiDate(value);
+  if (!/^\d{8}$/.test(digits)) return "";
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+}
+
+function selectedDate() {
+  return toApiDate(el("disclosure-date").value);
+}
+
+/* 报告期只有四个法定季末，倒序列出已过去的季末，未到的季末不可能有财报 */
+function periodOptions(years = 4) {
+  const now = new Date();
+  const today = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const options = [];
+  for (let offset = 0; offset < years; offset += 1) {
+    const year = now.getFullYear() - offset;
+    for (const suffix of ["1231", "0930", "0630", "0331"]) {
+      const period = `${year}${suffix}`;
+      if (period <= today) options.push(period);
+    }
+  }
+  return options;
+}
+
+function periodLabel(period) {
+  const quarter = { "0331": "一季报", "0630": "半年报", "0930": "三季报", "1231": "年报" }[period.slice(4)];
+  return `${period.slice(0, 4)} ${quarter || period}`;
+}
+
+function ensurePeriodOption(period) {
+  const select = el("company-period");
+  if (!period) return;
+  if ([...select.options].some((option) => option.value === period)) {
+    select.value = period;
+    return;
+  }
+  const option = document.createElement("option");
+  option.value = period;
+  option.textContent = periodLabel(period);
+  select.prepend(option);
+  select.value = period;
+}
+
+function initPeriodSelect(defaultPeriod) {
+  const select = el("company-period");
+  select.replaceChildren(
+    ...periodOptions().map((period) => {
+      const option = document.createElement("option");
+      option.value = period;
+      option.textContent = periodLabel(period);
+      return option;
+    })
+  );
+  ensurePeriodOption(defaultPeriod);
+}
 
 /* ---------- 通用工具 ---------- */
 
@@ -217,7 +283,7 @@ async function applyRoute() {
   activateView(route.view);
 
   if (route.date) {
-    el("disclosure-date").value = route.date;
+    el("disclosure-date").value = toInputDate(route.date);
     if (!state.bundle || state.bundle.date !== route.date) {
       await loadDisclosureDay(route.date);
     }
@@ -225,7 +291,7 @@ async function applyRoute() {
   }
   if (route.tsCode) {
     el("company-ts-code").value = route.tsCode;
-    el("company-period").value = route.period;
+    ensurePeriodOption(route.period);
     await loadCompany(route.tsCode, route.period);
   }
 }
@@ -240,11 +306,57 @@ function navigate(hash) {
 
 /* ---------- 渲染：披露日汇总 ---------- */
 
+/* 严重度分布条：按各段数量分配 flex-grow，数量为 0 的段不渲染 */
+function renderDistribution(counts) {
+  const segments = [
+    { cls: "seg-red", value: counts.red, label: "红色异常" },
+    { cls: "seg-yellow", value: counts.yellow, label: "黄色异常" },
+    { cls: "seg-ok", value: counts.ok, label: "未见异常" },
+    { cls: "seg-data", value: counts.data, label: "数据问题" },
+  ].filter((segment) => segment.value > 0);
+
+  if (segments.length === 0) {
+    summaryDistribution.hidden = true;
+    summaryDistribution.replaceChildren();
+    return;
+  }
+
+  summaryDistribution.hidden = false;
+  summaryDistribution.replaceChildren(
+    ...segments.map((segment) => {
+      const node = document.createElement("span");
+      node.className = segment.cls;
+      node.style.flexGrow = String(segment.value);
+      node.title = `${segment.label} ${segment.value} 家`;
+      return node;
+    })
+  );
+}
+
 function renderSummary(summary, scan) {
-  summaryTitle.textContent = `${summary.date} 披露研判`;
+  const dataProblems = scan.data_not_ready_count + scan.data_incomplete_count + scan.error_count;
+
+  summaryTitle.textContent = `${toInputDate(summary.date)} 披露研判`;
   summaryLine.textContent = `覆盖池 ${summary.coverage_count} 家 · 当日披露 ${summary.disclosed_count} 家`;
 
-  const dataProblems = scan.data_not_ready_count + scan.data_incomplete_count + scan.error_count;
+  const headline =
+    summary.red_count > 0
+      ? { text: `${summary.red_count} 家需优先追问`, cls: "red" }
+      : summary.yellow_count > 0
+        ? { text: `${summary.yellow_count} 家值得留意`, cls: "yellow" }
+        : { text: "当日无异常命中", cls: "ok" };
+  summaryChips.replaceChildren(
+    makeChip(headline.text, headline.cls),
+    makeChip(`固定链接 #/day/${summary.date}`)
+  );
+
+  renderDistribution({
+    red: summary.red_count,
+    yellow: summary.yellow_count,
+    ok: summary.ok_count,
+    data: dataProblems,
+  });
+
   const metrics = [
     { label: "当日披露", value: summary.disclosed_count, cls: "" },
     { label: "🔴 需优先关注", value: summary.red_count, cls: "red" },
@@ -714,7 +826,8 @@ async function loadQuarterly() {
     quarterlyReview.replaceChildren(
       ...metrics.map((item) => {
         const node = document.createElement("div");
-        node.className = "metric";
+        // 文本型取值用较小字号，避免长字符串撑破卡片
+        node.className = typeof item.value === "number" ? "metric" : "metric wide";
         const label = document.createElement("span");
         label.textContent = item.label;
         const value = document.createElement("strong");
@@ -741,7 +854,11 @@ async function showEvidence(card, finding) {
 /* ---------- 飞书预览与发送确认 ---------- */
 
 async function previewFeishu() {
-  const date = el("disclosure-date").value.trim();
+  const date = selectedDate();
+  if (!date) {
+    notify("请先选择披露日期", true);
+    return;
+  }
   const startedAt = scanProgress.start(`正在渲染 ${date} 飞书摘要…`);
   try {
     const preview = await api.previewFeishuDisclosureDay(date);
@@ -785,11 +902,20 @@ for (const name of VIEWS) {
 }
 
 el("analyze-disclosure-day").addEventListener("click", () => {
-  navigate(`#/day/${el("disclosure-date").value.trim()}`);
+  const date = selectedDate();
+  if (!date) {
+    notify("请先选择披露日期", true);
+    return;
+  }
+  navigate(`#/day/${date}`);
 });
 
 el("scan-disclosure-day").addEventListener("click", async () => {
-  const date = el("disclosure-date").value.trim();
+  const date = selectedDate();
+  if (!date) {
+    notify("请先选择披露日期", true);
+    return;
+  }
   const startedAt = scanProgress.start(`正在扫描 ${date} 覆盖池…`);
   try {
     const result = await api.scanDisclosureDay(date);
@@ -806,7 +932,7 @@ el("scan-disclosure-day").addEventListener("click", async () => {
 
 el("analyze-company").addEventListener("click", () => {
   const tsCode = el("company-ts-code").value.trim();
-  const period = el("company-period").value.trim();
+  const period = el("company-period").value;
   navigate(`#/company/${tsCode}/${period}`);
 });
 
@@ -853,6 +979,9 @@ window.addEventListener("hashchange", applyRoute);
 /* ---------- 启动 ---------- */
 
 async function boot() {
+  // 未来日期不可能有已披露财报，直接由控件挡住
+  el("disclosure-date").max = new Date().toISOString().slice(0, 10);
+  initPeriodSelect("20250630");
   await loadMeta();
   renderCards();
   renderReview();

@@ -9,8 +9,11 @@
 <body>
   <header class="app-bar">
     <div class="app-bar__brand">
-      <span class="app-bar__title">TradeEye Copilot</span>
-      <span class="app-bar__subtitle">A 股财报披露即时研判</span>
+      <span class="brand-mark" aria-hidden="true">TE</span>
+      <span class="app-bar__titles">
+        <span class="app-bar__title">TradeEye Copilot</span>
+        <span class="app-bar__subtitle">A 股财报披露即时研判</span>
+      </span>
     </div>
     <nav class="segmented" role="tablist" aria-label="工作台视图">
       <button role="tab" id="tab-workbench" data-view="workbench" aria-selected="true">工作台</button>
@@ -33,10 +36,12 @@
         <div class="button-row">
           <div class="field">
             <label for="disclosure-date">披露日期</label>
-            <input id="disclosure-date" type="text" value="20250821" inputmode="numeric" placeholder="YYYYMMDD" />
+            <!-- 日期选择器：控件值为 YYYY-MM-DD，调用接口前转成 YYYYMMDD -->
+            <input id="disclosure-date" type="date" value="2025-08-21" />
           </div>
           <button id="analyze-disclosure-day">生成披露日汇总</button>
           <button id="scan-disclosure-day" class="tonal">扫描诊断</button>
+          <span class="spacer"></span>
           <button id="preview-feishu" class="outlined">预览飞书摘要</button>
           <button id="export-menu-json" class="outlined">导出 JSON</button>
           <button id="export-menu-csv" class="outlined">导出 CSV</button>
@@ -52,11 +57,15 @@
         </div>
       </div>
 
-      <div class="surface" id="summary-panel">
-        <div class="section-head">
-          <h1 id="summary-title">尚未生成披露日汇总</h1>
-          <p id="summary-line">选择披露日后点击「生成披露日汇总」</p>
+      <div class="overview" id="summary-panel">
+        <div class="overview__head">
+          <div>
+            <h1 id="summary-title" class="overview__title">尚未生成披露日汇总</h1>
+            <p id="summary-line" class="overview__sub">选择披露日后点击「生成披露日汇总」</p>
+          </div>
+          <div class="app-bar__status" id="summary-chips"></div>
         </div>
+        <div class="distribution" id="summary-distribution" aria-hidden="true" hidden></div>
         <div class="metric-grid" id="summary-metrics"></div>
       </div>
 
@@ -89,7 +98,8 @@
           </div>
           <div class="field">
             <label for="company-period">报告期</label>
-            <input id="company-period" type="text" value="20250630" inputmode="numeric" placeholder="YYYYMMDD" />
+            <!-- 报告期只有四个法定季末，用下拉避免手输非法日期 -->
+            <select id="company-period"></select>
           </div>
           <button id="analyze-company">生成单票研判</button>
         </div>
