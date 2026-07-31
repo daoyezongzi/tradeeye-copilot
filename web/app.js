@@ -314,12 +314,11 @@ function makeChapterHead(title, count, note) {
 
 /* ---------- 视图路由：hash 稳定 URL ---------- */
 
-const VIEWS = ["workbench", "company", "review", "diagnostics"];
+const VIEWS = ["workbench", "company", "review"];
 const VIEW_TITLES = {
   workbench: "披露日研判",
   company: "单票研判",
   review: "复核队列",
-  diagnostics: "扫描诊断",
 };
 
 function activateView(view) {

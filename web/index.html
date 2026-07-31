@@ -24,7 +24,6 @@
           <button role="tab" id="tab-workbench" data-view="workbench" aria-selected="true">披露日研判</button>
           <button role="tab" id="tab-company" data-view="company" aria-selected="false">单票研判</button>
           <button role="tab" id="tab-review" data-view="review" aria-selected="false">复核队列</button>
-          <button role="tab" id="tab-diagnostics" data-view="diagnostics" aria-selected="false">扫描诊断</button>
         </nav>
       </div>
 
@@ -93,6 +92,39 @@
             <div id="card-groups" class="card-groups"></div>
           </div>
 
+          <details id="adv-diagnostics" class="fold">
+            <summary>
+              <span class="fold__title">高级诊断</span>
+              <span class="fold__hint">每家覆盖池公司为什么出卡或未出卡</span>
+            </summary>
+            <div class="fold__body">
+              <div id="diagnostic-status"></div>
+            </div>
+          </details>
+
+          <details id="adv-developer" class="fold">
+            <summary>
+              <span class="fold__title">开发者</span>
+              <span class="fold__hint">系统内部状态，与当日研判结论无关</span>
+            </summary>
+            <div class="fold__body">
+              <div class="fold__block">
+                <h3>RSS 触发</h3>
+                <p>RSS 仅作为触发提示，财务数据仍走 Tushare</p>
+                <button id="poll-rss" class="outlined">轮询 RSS</button>
+              </div>
+              <div class="fold__block">
+                <h3>披露季复盘</h3>
+                <div class="metric-grid" id="quarterly-review"></div>
+              </div>
+              <div class="fold__block">
+                <h3>操作日志</h3>
+                <p>最近一次接口调用的原始返回</p>
+                <pre id="operation-status" class="log"></pre>
+              </div>
+            </div>
+          </details>
+
           <div class="colophon">
             数据来源 Tushare 结构化财务表 · 规则为算术判定，LLM 不参与计算<br />
             每条 finding 均可溯源至原始快照字段 · 字段不适配的行业拒绝出卡而非降级出结论
@@ -159,38 +191,6 @@
           </div>
         </section>
 
-        <!-- ---------- 诊断 ---------- -->
-        <section id="view-diagnostics" class="view" role="tabpanel" aria-labelledby="tab-diagnostics" hidden>
-          <div>
-            <div class="section-head">
-              <h2>扫描诊断</h2>
-              <p>每家覆盖池公司为什么出卡或未出卡</p>
-            </div>
-            <div id="diagnostic-status"></div>
-          </div>
-          <div>
-            <div class="section-head">
-              <h2>RSS 触发</h2>
-              <p>RSS 仅作为触发提示，财务数据仍走 Tushare</p>
-            </div>
-            <div class="button-row">
-              <button id="poll-rss" class="outlined">轮询 RSS</button>
-            </div>
-          </div>
-          <div>
-            <div class="section-head">
-              <h2>披露季复盘</h2>
-            </div>
-            <div class="metric-grid" id="quarterly-review"></div>
-          </div>
-          <div>
-            <div class="section-head">
-              <h2>操作日志</h2>
-              <p>最近一次接口调用的原始返回</p>
-            </div>
-            <pre id="operation-status" class="log"></pre>
-          </div>
-        </section>
       </main>
     </div>
   </div>

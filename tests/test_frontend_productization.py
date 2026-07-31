@@ -18,12 +18,28 @@ def css() -> str:
     return Path("web/styles.css").read_text(encoding="utf-8")
 
 
-def test_workbench_information_architecture_has_four_views(html):
-    for view in ["workbench", "company", "review", "diagnostics"]:
+def test_workbench_information_architecture_has_three_views(html):
+    for view in ["workbench", "company", "review"]:
         assert f'id="view-{view}"' in html
         assert f'id="tab-{view}"' in html
     assert 'role="tablist"' in html
     assert 'role="tabpanel"' in html
+    # 扫描诊断已降为工作台折叠区，不再是顶级视图
+    assert 'id="view-diagnostics"' not in html
+    assert 'id="tab-diagnostics"' not in html
+
+
+def test_advanced_sections_are_collapsed_disclosures(html, css):
+    # 高级诊断与开发者工具各成一个原生 details：键盘可达、Ctrl+F 能搜到收起区内文字
+    assert '<details id="adv-diagnostics"' in html
+    assert '<details id="adv-developer"' in html
+    # 默认收起：details 上不带 open 属性
+    assert "open" not in html.split('<details id="adv-diagnostics"')[1].split(">")[0]
+    assert "open" not in html.split('<details id="adv-developer"')[1].split(">")[0]
+    # 容器 id 全部不变，因此 renderDiagnostics / loadQuarterly / setStatus 无需改动
+    for container in ["diagnostic-status", "quarterly-review", "operation-status", "poll-rss"]:
+        assert f'id="{container}"' in html
+    assert ".fold {" in css
 
 
 def test_feishu_preview_requires_send_confirmation(html, js):

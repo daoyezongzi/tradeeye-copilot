@@ -1210,6 +1210,80 @@ tbody tr:hover {
   color: var(--md-sys-color-on-surface-muted);
 }
 
+/* ---------- 折叠区：高级诊断 / 开发者 ---------- */
+
+/* 用原生 <details>：键盘可达、Ctrl+F 能搜到收起区内文字、不必自己维护 aria-expanded */
+.fold {
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--shadow-1);
+}
+
+.fold > summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  /* display:flex 已经吃掉默认三角，Safari 还要单独收 ::-webkit-details-marker */
+  list-style: none;
+}
+
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* 自绘展开标记：陶土橙已是导语竖线与焦点环的用色，这里属同类极小面积强调 */
+.fold > summary::before {
+  content: "▸";
+  color: var(--clay);
+  font-size: 11px;
+  transition: transform var(--ease);
+}
+
+.fold[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.fold > summary:hover {
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.fold__title {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.fold__hint {
+  font-size: 13px;
+  color: var(--md-sys-color-on-surface-muted);
+}
+
+.fold__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.fold__block > h3 {
+  margin: 0 0 var(--space-1);
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.fold__block > p {
+  margin: 0 0 var(--space-3);
+  font-size: 13px;
+  color: var(--md-sys-color-on-surface-muted);
+}
+
 /* ---------- 对话框 ---------- */
 
 dialog {
