@@ -1225,11 +1225,15 @@ tbody tr:hover {
   align-items: baseline;
   gap: var(--space-3);
   flex-wrap: wrap;
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-lg);
   cursor: pointer;
   /* display:flex 已经吃掉默认三角，Safari 还要单独收 ::-webkit-details-marker */
   list-style: none;
+}
+
+.fold > summary:focus-visible {
+  border-radius: var(--radius-lg);
 }
 
 .fold > summary::-webkit-details-marker {
