@@ -227,6 +227,20 @@ company_industries:
 
 The backend loader validates that every code has both a display name and an industry route before replacing the smoke pool.
 
+### Industry rule pack gate
+
+The current smoke pool does not provide enough concrete industry-specific failure samples to implement another rule pack safely. Do not add securities, insurance, real-estate, utilities, or true bank metric rules until a real sample identifies the exact Tushare fields and expected finding logic.
+
+### PDF / LLM attribution gate
+
+Do not connect LLM attribution into real Feishu cards until these gate conditions are met:
+
+- Stable source PDF retrieval for the exact report announcement.
+- Deterministic extraction of management discussion text.
+- Token/latency budget measured on at least 20 real cards.
+- Attribution text remains evidence-linked and never replaces arithmetic rule findings.
+- If LLM call fails, card still sends with rule evidence.
+
 ### Backend Feishu completion self-review
 
 Completed in this phase:
