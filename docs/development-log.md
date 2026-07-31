@@ -212,6 +212,21 @@ DATA_PROBLEMS=0
 - 耗时主因是 100 家覆盖池逐家拉 Tushare 三期四表，且正式发送路径当前会先 `analyze_disclosure_day()` 再 `scan_disclosure_day()`，存在重复分析风险。
 - 后续性能优化应改为一次 disclosure scan 复用 `CompanyAnalysisResult`，同时生成 `DailySummary` 和 diagnostics，再直接渲染飞书。
 
+### Watchlist replacement path
+
+The current 100-stock pool is a smoke pool. The production replacement path should use a YAML watchlist with:
+
+```yaml
+coverage_pool:
+  - 000001.SZ
+company_names:
+  000001.SZ: 平安银行
+company_industries:
+  000001.SZ: bank
+```
+
+The backend loader validates that every code has both a display name and an industry route before replacing the smoke pool.
+
 ### Backend Feishu completion self-review
 
 Completed in this phase:
