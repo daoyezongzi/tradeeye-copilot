@@ -139,3 +139,19 @@ rules:
     assert settings.eval.start_date == "20250801"
     assert settings.eval.end_date == "20250831"
     assert settings.eval.benchmark_output == Path("artifacts/benchmark.json")
+
+
+def test_load_settings_reads_automation_trigger_token(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+database:
+  path: tmp/app.sqlite
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AUTOMATION_TRIGGER_TOKEN", "cron-secret")
+
+    settings = load_settings(config_path)
+
+    assert settings.automation.trigger_token == "cron-secret"

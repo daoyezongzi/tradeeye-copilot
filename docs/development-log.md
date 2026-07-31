@@ -2,6 +2,37 @@
 
 ## 2026-07-31
 
+### 阶段归档：自动化披露扫描部署触发
+
+本阶段完成 #47 的可部署自动化触发闭环：
+
+- 保留人工联调入口 `POST /api/automation/disclosure-day`，不加 token，便于本地和前端继续手动触发。
+- 新增公网 cron 入口 `POST /api/automation/disclosure-day/cron`，必须带 `X-Automation-Token`。
+- 新增 `AutomationSettings.trigger_token`，从环境变量 `AUTOMATION_TRIGGER_TOKEN` 读取。
+- `RealReportService.verify_automation_trigger_token()` 要求 token 已配置且完全匹配，避免定时入口裸奔。
+- 新增 `.github/workflows/disclosure-automation.yml`，支持 GitHub Actions `schedule` 和 `workflow_dispatch`，调用部署后的 FastAPI 后端。
+- workflow 使用 secrets：`TRADEEYE_API_BASE_URL` 与 `AUTOMATION_TRIGGER_TOKEN`；手动触发可覆盖日期与是否通知。
+
+自审结论：
+
+- Python 分析后端仍部署在 FastAPI 运行环境，GitHub Actions 只做外部触发器，不尝试把 Tushare/pandas 分析迁到 GitHub Pages 或 Cloudflare Worker。
+- workflow 对 `notify` 做 choice 与 shell 二次校验，只允许 `true/false`，避免拼出非法 JSON。
+- `diff --check` 干净。
+
+验证：
+
+```bash
+python -m pytest tests/test_api_automation_routes.py tests/test_scheduler.py tests/test_config.py -q --basetemp=.pytest_tmp
+python -m pytest -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+10 passed
+170 passed
+```
+
 ### 阶段归档：复核状态后端化
 
 本阶段完成前端 Spec 3，把复核状态从浏览器 `localStorage` 迁到后端 `review_labels`：
@@ -140,7 +171,7 @@ python -m pytest tests/test_api_automation_routes.py tests/test_scheduler.py tes
 
 - 本阶段未修改 `web/` 前端文件。
 - API 已为前端后续对接预留：job history、复核状态、飞书 callback。
-- 仍未做外部 cron/worker 部署、飞书签名校验、多用户权限、详情页公网 base URL 配置。
+- 仍未做飞书签名校验、多用户权限、详情页公网 base URL 配置。
 - 飞书卡片详情 URL 支持传入 `base_url`，当前真实发送路径暂未配置公网 base URL。
 
 验证：
@@ -650,7 +681,7 @@ python -m pytest -q --basetemp=.pytest_tmp
 
 #### P3：自动化与归因
 
-- 自动触发下一步再做：scheduler、系统定时任务、RSS retry queue、失败重试 daemon 均暂后置。
+- 自动触发已接 GitHub Actions cron → 受 token 保护的 FastAPI cron API；RSS retry queue、失败重试 daemon 仍暂后置。
 - PDF / LLM 归因仍未接入真实卡片；接入前需满足 PDF 获取、章节抽取、token/latency 预算与失败降级 gate。
 
 ## 2026-07-30
@@ -797,7 +828,7 @@ FEISHU_REASON=ok
 - 披露日诊断输出：需要更清楚展示每个覆盖池公司为什么没出卡，而不是只返回 cards。
 - RSS 真实 feed 配置：当前 `rss.feeds` 为空；`rss.company_names` 也需要随覆盖池维护。
 - 飞书交互卡片：当前只做 webhook 静态文本，尚未做按钮、复核、callback。
-- 自动触发：当前是手动 API/前端按钮，尚未做 scheduler、系统定时任务或 retry daemon。
+- 自动触发：已支持手动 API/前端按钮/GitHub Actions cron 触发；尚未做 RSS retry queue 或失败重试 daemon。
 - PDF / LLM 归因接入真实卡片：当前真实 card 归因仍是降级/占位，未接真实财报 PDF 管理层讨论章节。
 - CLI 入口：尚未做命令行触发披露日汇总/飞书推送。
 - 真实回测：尚未跑正式覆盖池披露季 benchmark、人工复核 precision。

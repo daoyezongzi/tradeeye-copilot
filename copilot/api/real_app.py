@@ -211,6 +211,10 @@ class RealReportService:
         expected = getattr(self.settings.notify, "feishu_verification_token", None)
         return expected is None or token == expected
 
+    def verify_automation_trigger_token(self, token):
+        expected = getattr(self.settings.automation, "trigger_token", None)
+        return expected is not None and token == expected
+
     def preview_feishu_disclosure_day(self, date):
         text, reason = self._render_disclosure_text(date)
         return FeishuPreview(date=date, text=text, sendable=reason == "ok", reason=reason)

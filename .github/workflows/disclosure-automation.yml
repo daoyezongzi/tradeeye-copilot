@@ -1,0 +1,49 @@
+name: Disclosure Automation
+
+on:
+  schedule:
+    - cron: "30 10 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Disclosure date in YYYYMMDD; defaults to current UTC date"
+        required: false
+      notify:
+        description: "Send Feishu notification"
+        type: choice
+        options:
+          - "true"
+          - "false"
+        required: false
+        default: "true"
+
+jobs:
+  trigger-disclosure-automation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger disclosure automation
+        env:
+          TRADEEYE_API_BASE_URL: ${{ secrets.TRADEEYE_API_BASE_URL }}
+          AUTOMATION_TRIGGER_TOKEN: ${{ secrets.AUTOMATION_TRIGGER_TOKEN }}
+          DISCLOSURE_DATE: ${{ github.event.inputs.date }}
+          DISCLOSURE_NOTIFY: ${{ github.event.inputs.notify || 'true' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TRADEEYE_API_BASE_URL}" ]; then
+            echo "TRADEEYE_API_BASE_URL secret is required" >&2
+            exit 1
+          fi
+          if [ -z "${AUTOMATION_TRIGGER_TOKEN}" ]; then
+            echo "AUTOMATION_TRIGGER_TOKEN secret is required" >&2
+            exit 1
+          fi
+          if [ "${DISCLOSURE_NOTIFY}" != "true" ] && [ "${DISCLOSURE_NOTIFY}" != "false" ]; then
+            echo "DISCLOSURE_NOTIFY must be true or false" >&2
+            exit 1
+          fi
+          DATE="${DISCLOSURE_DATE:-$(date -u +%Y%m%d)}"
+          curl --fail-with-body \
+            -X POST "${TRADEEYE_API_BASE_URL%/}/api/automation/disclosure-day/cron" \
+            -H "Content-Type: application/json" \
+            -H "X-Automation-Token: ${AUTOMATION_TRIGGER_TOKEN}" \
+            --data "{\"date\":\"${DATE}\",\"notify\":${DISCLOSURE_NOTIFY}}"

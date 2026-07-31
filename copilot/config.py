@@ -35,6 +35,10 @@ class NotifySettings(BaseModel):
     public_base_url: str | None = None
 
 
+class AutomationSettings(BaseModel):
+    trigger_token: str | None = None
+
+
 class EvalSettings(BaseModel):
     coverage_pool: list[str] = Field(default_factory=list)
     company_industries: dict[str, str] = Field(default_factory=dict)
@@ -68,6 +72,7 @@ class Settings(BaseModel):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     narrative: NarrativeSettings = Field(default_factory=NarrativeSettings)
     notify: NotifySettings = Field(default_factory=NotifySettings)
+    automation: AutomationSettings = Field(default_factory=AutomationSettings)
     eval: EvalSettings = Field(default_factory=EvalSettings)
     rss: RssSettings = Field(default_factory=RssSettings)
     rules: RuleSettings = Field(default_factory=RuleSettings)
@@ -82,4 +87,5 @@ def load_settings(path: str | Path = "config.yaml", env_path: str | Path = ".env
     data.setdefault("notify", {})["feishu_webhook"] = os.getenv("FEISHU_WEBHOOK")
     data.setdefault("notify", {})["feishu_verification_token"] = os.getenv("FEISHU_VERIFICATION_TOKEN")
     data.setdefault("notify", {})["public_base_url"] = os.getenv("PUBLIC_BASE_URL")
+    data.setdefault("automation", {})["trigger_token"] = os.getenv("AUTOMATION_TRIGGER_TOKEN")
     return Settings.model_validate(data)

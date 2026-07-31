@@ -2,7 +2,7 @@ from io import StringIO
 import csv
 from typing import Protocol
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -151,6 +151,8 @@ class ReportService(Protocol):
 
     def verify_feishu_callback_token(self, token: str | None) -> bool: ...
 
+    def verify_automation_trigger_token(self, token: str | None) -> bool: ...
+
     def preview_feishu_disclosure_day(self, date: str) -> FeishuPreview: ...
 
     def notify_feishu_disclosure_day(self, date: str) -> NotifyResult: ...
@@ -254,6 +256,12 @@ def create_app(report_service: ReportService) -> FastAPI:
 
     @app.post("/api/automation/disclosure-day", response_model=AutomationDisclosureDayResult)
     def run_disclosure_automation(request: AutomationDisclosureDayRequest):
+        return report_service.run_disclosure_automation(request.date, notify=request.notify)
+
+    @app.post("/api/automation/disclosure-day/cron", response_model=AutomationDisclosureDayResult)
+    def run_disclosure_automation_cron(request: AutomationDisclosureDayRequest, x_automation_token: str | None = Header(default=None)):
+        if not report_service.verify_automation_trigger_token(x_automation_token):
+            raise HTTPException(status_code=403, detail="invalid automation trigger token")
         return report_service.run_disclosure_automation(request.date, notify=request.notify)
 
     @app.post("/api/rss/poll", response_model=RssPollResult)

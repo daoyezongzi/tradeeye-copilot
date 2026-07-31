@@ -249,6 +249,9 @@ class DemoReportService:
     def verify_feishu_callback_token(self, token):
         return True
 
+    def verify_automation_trigger_token(self, token):
+        return token == "dev-automation-token"
+
     def preview_feishu_disclosure_day(self, date):
         bundle = self.analyze_disclosure_day_bundle(date)
         if bundle.scan.disclosed_count == 0:
