@@ -1,12 +1,12 @@
 from fastapi import HTTPException
 
-from copilot.api.app import NotifyResult, create_app
+from copilot.api.app import AppMeta, FeishuPreview, NotifyResult, create_app
 from copilot.config import load_settings
 from copilot.datasource.calendar import TushareDisclosureCalendarClient
 from copilot.datasource.fundamentals import TushareFundamentalsClient
 from copilot.datasource.tushare_client import TushareTokenMissing, create_tushare_pro
 from copilot.eval.backtest import BacktestSummary
-from copilot.notify.feishu import FeishuNotifier, render_formal_disclosure_text
+from copilot.notify.feishu import FeishuNotifier, render_formal_disclosure_text, split_feishu_text
 from copilot.report.builder import build_daily_summary, build_quarterly_review
 from copilot.rss.service import RssPollResult, RssPollService
 from copilot.service.analyzer import AnalyzerService
@@ -83,44 +83,61 @@ class RealReportService:
             self.cache.put_company(result.card)
         return result
 
-    def analyze_disclosure_day(self, date):
+    def get_meta(self):
+        return AppMeta(
+            coverage_count=len(self.settings.eval.coverage_pool),
+            company_names=self.settings.eval.company_names,
+            tushare_ready=self.analyzer is not None,
+            feishu_ready=bool(self.settings.notify.feishu_webhook),
+        )
+
+    def analyze_disclosure_day_bundle(self, date):
         if self.analyzer is None:
             raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
         bundle = self.analyzer.analyze_disclosure_day_bundle(date)
         for card in bundle.summary.cards:
             self.cache.put_company(card)
         self.cache.put_daily(bundle.summary)
-        return bundle.summary
+        return bundle
+
+    def analyze_disclosure_day(self, date):
+        return self.analyze_disclosure_day_bundle(date).summary
 
     def scan_disclosure_day(self, date):
-        if self.analyzer is None:
-            raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
-        return self.analyzer.analyze_disclosure_day_bundle(date).scan
+        return self.analyze_disclosure_day_bundle(date).scan
 
     def poll_rss(self):
         if self.rss_service is None:
             return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])
         return self.rss_service.poll()
 
-    def _send_feishu_text(self, text):
+    def _send_feishu_text_parts(self, parts):
         webhook = self.settings.notify.feishu_webhook
         if not webhook:
             return False
-        return FeishuNotifier(webhook).send_text(text)
+        return FeishuNotifier(webhook).send_text_parts(parts)
+
+    def _render_disclosure_text(self, date):
+        bundle = self.analyze_disclosure_day_bundle(date)
+        if bundle.summary.disclosed_count == 0 and bundle.scan.disclosed_count == 0:
+            return "", "no_disclosures"
+        if not self.settings.notify.feishu_webhook:
+            reason = "webhook_not_configured"
+        else:
+            reason = "ok"
+        text = render_formal_disclosure_text(bundle.summary, bundle.scan, self.settings.eval.company_names)
+        return text, reason
+
+    def preview_feishu_disclosure_day(self, date):
+        text, reason = self._render_disclosure_text(date)
+        return FeishuPreview(date=date, text=text, sendable=reason == "ok", reason=reason)
 
     def notify_feishu_disclosure_day(self, date):
-        if self.analyzer is None:
-            raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
-        bundle = self.analyzer.analyze_disclosure_day_bundle(date)
-        for card in bundle.summary.cards:
-            self.cache.put_company(card)
-        self.cache.put_daily(bundle.summary)
-        if bundle.summary.disclosed_count == 0 and bundle.scan.disclosed_count == 0:
-            return NotifyResult(sent=False, reason="no_disclosures")
-        if not self.settings.notify.feishu_webhook:
-            return NotifyResult(sent=False, reason="webhook_not_configured")
-        text = render_formal_disclosure_text(bundle.summary, bundle.scan, self.settings.eval.company_names)
-        sent = self._send_feishu_text(text)
+        text, reason = self._render_disclosure_text(date)
+        if reason != "ok":
+            return NotifyResult(sent=False, reason=reason)
+        parts = split_feishu_text(text)
+        sent = self._send_feishu_text_parts(parts)
         return NotifyResult(sent=sent, reason="ok" if sent else "send_failed")
 
 

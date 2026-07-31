@@ -9,9 +9,14 @@ from copilot.service.disclosure_scan import CompanyAnalysisStatus, build_analysi
 class FakeNotifier:
     def __init__(self):
         self.sent_text = None
+        self.sent_parts = None
 
     def send_text(self, text):
         self.sent_text = text
+        return True
+
+    def send_text_parts(self, parts):
+        self.sent_parts = parts
         return True
 
 
@@ -72,6 +77,9 @@ class BundleNotifyService(RealReportService):
     def _send_feishu_text(self, text):
         return self.notifier.send_text(text)
 
+    def _send_feishu_text_parts(self, parts):
+        return self.notifier.send_text_parts(parts)
+
 
 def test_notify_feishu_uses_one_bundle_call():
     service = BundleNotifyService()
@@ -80,6 +88,6 @@ def test_notify_feishu_uses_one_bundle_call():
 
     assert result == NotifyResult(sent=True, reason="ok")
     assert service.analyzer.bundle_calls == 1
-    assert "603026.SH 石大胜华" in service.notifier.sent_text
+    assert "603026.SH 石大胜华" in service.notifier.sent_parts[0]
     assert service.cache.companies == ["603026.SH"]
     assert service.cache.daily == "20250825"
