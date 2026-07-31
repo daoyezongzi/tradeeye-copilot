@@ -143,30 +143,6 @@ const api = {
     });
   },
 
-  async analyzeDisclosureDay(date) {
-    return requestJson("/api/analyze/disclosure-day", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date }),
-    });
-  },
-
-  async scanDisclosureDay(date) {
-    return requestJson("/api/scan/disclosure-day", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date }),
-    });
-  },
-
-  async disclosureDayBundle(date) {
-    return requestJson("/api/disclosure-day/bundle", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date }),
-    });
-  },
-
   async startDisclosureDayJob(date) {
     return requestJson("/api/disclosure-day/jobs", {
       method: "POST",
@@ -348,6 +324,8 @@ function parseHash() {
   if (parts[0] === "company" && parts[1] && parts[2]) {
     return { view: "company", tsCode: parts[1], period: parts[2] };
   }
+  /* 扫描诊断已降为工作台折叠区，旧链接落到工作台并展开该区 */
+  if (parts[0] === "diagnostics") return { view: "workbench", expandDiagnostics: true };
   if (VIEWS.includes(parts[0])) return { view: parts[0] };
   return { view: "workbench" };
 }
@@ -355,6 +333,11 @@ function parseHash() {
 async function applyRoute() {
   const route = parseHash();
   activateView(route.view);
+
+  if (route.expandDiagnostics) {
+    el("adv-diagnostics").open = true;
+    el("adv-diagnostics").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   if (route.date) {
     el("disclosure-date").value = toInputDate(route.date);
