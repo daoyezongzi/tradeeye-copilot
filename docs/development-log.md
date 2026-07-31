@@ -2,6 +2,34 @@
 
 ## 2026-07-31
 
+### 阶段归档：后端披露扫描收口与前端待办盘点
+
+本轮主要解决后端可观测、可停止、可恢复的披露日扫描问题，并对前端剩余产品化工作做了一轮盘点。
+
+后端已收口：
+
+- 披露日扫描已从同步长请求改为 job 化流程，支持 `POST /api/disclosure-day/jobs`、`GET /api/disclosure-day/jobs/{job_id}`、`POST /api/disclosure-day/jobs/{job_id}/cancel`。
+- `AnalyzerService` 支持扫描进度回调和取消检查，能在公司开始、公司完成、取消时上报状态。
+- `TushareFundamentalsClient` 支持表级阶段回调，当前可观察到 `fetch_income / fetch_balancesheet / fetch_cashflow / fetch_indicator`。
+- job 状态已落 SQLite `disclosure_jobs`，包含当前公司、当前报告期、当前阶段、进度、日志、取消标记和最终 partial/full bundle。
+- 取消语义是安全停止，不是强杀请求；已发出的单次 Tushare HTTP 请求会等返回后在下一安全点停止。
+
+前端盘点结论：
+
+- 当前前端实现的是「停止扫描」，不是「暂停 / 继续」。如需 pause/resume，需要后端新增暂停状态、扫描游标和 resume API，不能只加按钮。
+- 「扫描诊断」不是多余能力，但作为顶级 tab 对普通用户偏重，建议改为主扫描页里的高级诊断折叠区。
+- 「生成披露日汇总」和「扫描诊断」两个入口都围绕同一 disclosure-day job 流程，建议合并成一个主扫描入口，完成后同页展示汇总和诊断摘要。
+- RSS 触发、原始操作日志、季度复盘更像高级/开发者入口，正式产品中应默认隐藏或折叠。
+- 后端已有 job SQLite 持久化，但前端还没有 job history、刷新后恢复正在跑/刚跑完 job 的 UI。
+- 复核队列仍偏 localStorage，本地可用但不是权威状态；后续应迁到后端 SQLite / D1 / API。
+
+后端剩余待执行项：
+
+- 如果要真正支持 pause/resume，需要升级 job 状态机、持久化扫描 cursor，并改造 Analyzer 从指定 cursor 续扫。
+- 如果要进入多人/生产环境，需要补 job 多用户隔离、旧 job 清理、后台任务队列替代 FastAPI `BackgroundTasks`。
+- 如果要形成业务闭环，需要补后端复核状态存储、后端导出接口、飞书 interactive card callback。
+- 行业规则与正式 benchmark 仍未完成：银行 NIM/NPL/拨备覆盖率/资本充足率、券商/保险/地产/公用事业规则包，以及代表性正式覆盖池多披露日阈值校准。
+
 ### 阶段归档：可停止披露扫描闭环
 
 本阶段围绕“大覆盖池扫描时要实时知道 Tushare 抓到哪，并能中途停止”完成闭环：
