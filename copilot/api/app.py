@@ -9,6 +9,7 @@ from copilot.report.builder import CompanyCard, DailySummary, QuarterlyReview
 from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult
 from copilot.service.disclosure_scan import DisclosureAnalysisBundle, DisclosureScanResult
+from copilot.service.notify_store import NotifyLogEvent
 from copilot.service.review_store import StoredReviewLabel
 
 
@@ -19,6 +20,19 @@ class AnalyzeCompanyRequest(BaseModel):
 
 class AnalyzeDisclosureDayRequest(BaseModel):
     date: str
+
+
+class AutomationDisclosureDayRequest(BaseModel):
+    date: str
+    notify: bool = True
+
+
+class AutomationDisclosureDayResult(BaseModel):
+    date: str
+    job_id: str
+    scan_status: str
+    notify_sent: bool = False
+    notify_reason: str | None = None
 
 
 class ReviewLabelRequest(BaseModel):
@@ -42,7 +56,9 @@ class FeishuCallbackOperator(BaseModel):
 
 
 class FeishuCallbackRequest(BaseModel):
-    action: FeishuCallbackAction
+    token: str | None = None
+    challenge: str | None = None
+    action: FeishuCallbackAction | None = None
     operator: FeishuCallbackOperator | None = None
 
 
@@ -120,7 +136,13 @@ class ReportService(Protocol):
 
     def list_review_labels(self, ts_code: str | None = None, period: str | None = None) -> list[StoredReviewLabel]: ...
 
+    def run_disclosure_automation(self, date: str, notify: bool = True) -> AutomationDisclosureDayResult: ...
+
+    def list_notify_logs(self, limit: int = 20) -> list[NotifyLogEvent]: ...
+
     def poll_rss(self) -> RssPollResult: ...
+
+    def verify_feishu_callback_token(self, token: str | None) -> bool: ...
 
     def preview_feishu_disclosure_day(self, date: str) -> FeishuPreview: ...
 
@@ -202,12 +224,27 @@ def create_app(report_service: ReportService) -> FastAPI:
     def list_review_labels(ts_code: str | None = None, period: str | None = None):
         return report_service.list_review_labels(ts_code=ts_code, period=period)
 
+    @app.post("/api/automation/disclosure-day", response_model=AutomationDisclosureDayResult)
+    def run_disclosure_automation(request: AutomationDisclosureDayRequest):
+        return report_service.run_disclosure_automation(request.date, notify=request.notify)
+
     @app.post("/api/rss/poll", response_model=RssPollResult)
     def poll_rss():
         return report_service.poll_rss()
 
-    @app.post("/api/notify/feishu/callback", response_model=FeishuCallbackResult)
+    @app.get("/api/notify/logs", response_model=list[NotifyLogEvent])
+    def list_notify_logs(limit: int = 20):
+        return report_service.list_notify_logs(limit)
+
+    @app.post("/api/notify/feishu/callback")
     def feishu_callback(callback: FeishuCallbackRequest):
+        verify_callback = getattr(report_service, "verify_feishu_callback_token", lambda token: True)
+        if not verify_callback(callback.token):
+            raise HTTPException(status_code=403, detail="invalid feishu callback token")
+        if callback.challenge is not None:
+            return {"challenge": callback.challenge}
+        if callback.action is None:
+            return FeishuCallbackResult(ok=False, reason="ignored")
         value = callback.action.value
         if value.get("action") != "review_label":
             return FeishuCallbackResult(ok=False, reason="ignored")

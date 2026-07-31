@@ -4,13 +4,11 @@ from copilot.api.app import AppMeta, FeishuPreview, NotifyResult, create_app
 from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult
 from copilot.service.disclosure_scan import CompanyAnalysisStatus, build_analysis_bundle
-from copilot.service.review_store import StoredReviewLabel
 
 
-class FakeFeishuCallbackService:
+class FakeAutomationApiService:
     def __init__(self):
-        self.labels = []
-        self.feishu_verification_token = "token-for-test"
+        self.automation_dates = []
 
     def get_company_card(self, ts_code, period):
         return None
@@ -25,7 +23,7 @@ class FakeFeishuCallbackService:
         return None
 
     def get_meta(self):
-        return AppMeta(coverage_count=0, company_names={}, tushare_ready=False, feishu_ready=True)
+        return AppMeta(coverage_count=0, company_names={}, tushare_ready=True, feishu_ready=True)
 
     def analyze_company(self, ts_code, period):
         return CompanyAnalysisResult(status=CompanyAnalysisStatus.OK, message="ok")
@@ -55,8 +53,7 @@ class FakeFeishuCallbackService:
         raise AssertionError("not used")
 
     def upsert_review_label(self, label):
-        self.labels.append(label)
-        return StoredReviewLabel(**label.model_dump(), updated_at=1.0)
+        raise AssertionError("not used")
 
     def list_review_labels(self, ts_code=None, period=None):
         return []
@@ -64,47 +61,26 @@ class FakeFeishuCallbackService:
     def poll_rss(self):
         return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])
 
+    def verify_feishu_callback_token(self, token):
+        return True
+
     def preview_feishu_disclosure_day(self, date):
         return FeishuPreview(date=date, text="", sendable=False, reason="webhook_not_configured")
 
     def notify_feishu_disclosure_day(self, date):
-        return NotifyResult(sent=False, reason="webhook_not_configured")
+        return NotifyResult(sent=True, reason="ok")
 
-    def verify_feishu_callback_token(self, token):
-        return token == self.feishu_verification_token
+    def run_disclosure_automation(self, date, notify=True):
+        self.automation_dates.append((date, notify))
+        return {"date": date, "job_id": "job-1", "scan_status": "completed", "notify_sent": notify, "notify_reason": "ok" if notify else "disabled"}
 
 
-def test_feishu_callback_records_review_label():
-    service = FakeFeishuCallbackService()
+def test_disclosure_automation_route_runs_scan_and_notify():
+    service = FakeAutomationApiService()
     client = TestClient(create_app(service))
 
-    response = client.post(
-        "/api/notify/feishu/callback",
-        json={
-            "token": "token-for-test",
-            "action": {"value": {"action": "review_label", "label": "FALSE", "ts_code": "603026.SH", "period": "20250630", "rule_id": "cashflow_quality", "severity": "RED"}},
-            "operator": {"name": "张三"},
-        },
-    )
+    response = client.post("/api/automation/disclosure-day", json={"date": "20250825", "notify": True})
 
     assert response.status_code == 200
-    assert response.json() == {"ok": True, "reason": "review_recorded"}
-    assert service.labels[0].label == "FALSE"
-    assert service.labels[0].reviewer == "张三"
-
-
-def test_feishu_callback_returns_challenge_for_url_verification():
-    client = TestClient(create_app(FakeFeishuCallbackService()))
-
-    response = client.post("/api/notify/feishu/callback", json={"token": "token-for-test", "challenge": "abc123"})
-
-    assert response.status_code == 200
-    assert response.json() == {"challenge": "abc123"}
-
-
-def test_feishu_callback_rejects_wrong_token():
-    client = TestClient(create_app(FakeFeishuCallbackService()))
-
-    response = client.post("/api/notify/feishu/callback", json={"token": "wrong", "challenge": "abc123"})
-
-    assert response.status_code == 403
+    assert response.json() == {"date": "20250825", "job_id": "job-1", "scan_status": "completed", "notify_sent": True, "notify_reason": "ok"}
+    assert service.automation_dates == [("20250825", True)]

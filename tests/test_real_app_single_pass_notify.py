@@ -72,12 +72,24 @@ class FakeSettings:
     eval = Eval()
 
 
+class FakeNotifyStore:
+    def __init__(self):
+        self.attempts = []
+
+    def already_sent(self, channel, dedupe_key):
+        return False
+
+    def record_attempt(self, channel, dedupe_key, sent, reason):
+        self.attempts.append((channel, dedupe_key, sent, reason))
+
+
 class BundleNotifyService(RealReportService):
     def __init__(self):
         self.settings = FakeSettings()
         self.analyzer = FakeAnalyzer()
         self.notifier = FakeNotifier()
         self.cache = FakeCache()
+        self.notify_store = FakeNotifyStore()
 
     def _send_feishu_text(self, text):
         return self.notifier.send_text(text)

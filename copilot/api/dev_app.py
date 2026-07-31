@@ -3,6 +3,7 @@ from copilot.eval.backtest import BacktestCompanyResult, BacktestSummary
 from copilot.models import Context, Evidence, Finding, PeriodSnapshot, Severity
 from copilot.notify.feishu import render_formal_disclosure_text
 from copilot.report.builder import build_company_card, build_quarterly_review
+from copilot.scheduler import DisclosureAutomationJob, run_disclosure_automation_job
 from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult, CompanyAnalysisStatus
 from copilot.service.disclosure_jobs import DisclosureJobStore
@@ -213,8 +214,17 @@ class DemoReportService:
             labels = [label for label in labels if label.period == period]
         return labels
 
+    def run_disclosure_automation(self, date, notify=True):
+        return run_disclosure_automation_job(DisclosureAutomationJob(date=date, notify=notify), self)
+
     def poll_rss(self):
         return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])
+
+    def list_notify_logs(self, limit=20):
+        return []
+
+    def verify_feishu_callback_token(self, token):
+        return True
 
     def preview_feishu_disclosure_day(self, date):
         bundle = self.analyze_disclosure_day_bundle(date)

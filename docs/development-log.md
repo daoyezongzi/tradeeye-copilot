@@ -2,6 +2,40 @@
 
 ## 2026-07-31
 
+### 阶段归档：等前端期间的后端可联调增强
+
+按“前端同步跑时，后端先做可一起测的接口”的流程，本阶段继续补纯后端闭环，不修改 `web/`：
+
+- 飞书 callback 支持 URL verification challenge，`POST /api/notify/feishu/callback` 收到 `challenge` 时直接返回 `{ "challenge": ... }`。
+- 飞书 callback 增加 verification token 校验；真实配置从 `FEISHU_VERIFICATION_TOKEN` / `notify.feishu_verification_token` 读取。
+- 通知配置新增 `PUBLIC_BASE_URL` / `notify.public_base_url`，interactive card 的「查看详情」按钮可生成稳定详情 URL。
+- 新增 `NotifyLogStore`，落 SQLite `notify_logs`，记录每次飞书通知尝试的 channel、dedupe_key、sent、reason、created_at。
+- `notify_feishu_disclosure_day()` 增加幂等：同一 `feishu_disclosure_day + date` 已成功发送后，后续返回 `already_sent`，避免联调或定时任务重复轰炸飞书。
+- 新增通知日志接口：`GET /api/notify/logs?limit=20`，便于直接用 API 查看发送、失败、幂等记录。
+- 新增自动化手动触发接口：`POST /api/automation/disclosure-day`，请求 `{ "date": "YYYYMMDD", "notify": true }`，返回 job_id、scan_status、notify_sent、notify_reason，供 cron/worker 前先人工联调。
+
+可一起测的接口：
+
+```http
+POST /api/automation/disclosure-day
+GET  /api/notify/logs?limit=20
+POST /api/notify/feishu/callback
+```
+
+验证：
+
+```bash
+python -m pytest tests/test_api_automation_routes.py tests/test_scheduler.py tests/test_api_feishu_callback.py tests/test_real_app_interactive_notify.py tests/test_notify_store.py tests/test_api_notify_logs.py tests/test_config.py tests/test_real_app_single_pass_notify.py tests/test_real_app_notify.py tests/test_api_notify_routes.py -q --basetemp=.pytest_tmp
+```
+
+结果：
+
+```text
+18 passed
+```
+
+全量测试当前未作为通过标准：前端同步改动正在调整 `web/` 契约，失败点集中在前端旧测试断言（旧按钮 id / 旧菜单 helper），不是本阶段后端接口失败。
+
 ### 阶段归档：后端自动化与飞书交互接口基础
 
 本阶段按“不动前端，但做好接口对接”的约束，补齐产品闭环需要的后端接口基础：

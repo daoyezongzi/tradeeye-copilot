@@ -31,6 +31,8 @@ class NarrativeSettings(BaseModel):
 class NotifySettings(BaseModel):
     feishu_enabled: bool = False
     feishu_webhook: str | None = None
+    feishu_verification_token: str | None = None
+    public_base_url: str | None = None
 
 
 class EvalSettings(BaseModel):
@@ -78,4 +80,6 @@ def load_settings(path: str | Path = "config.yaml", env_path: str | Path = ".env
     data.setdefault("tushare", {})["token"] = os.getenv("TUSHARE_TOKEN")
     data.setdefault("llm", {})["api_key"] = os.getenv("ASCEND_API_KEY")
     data.setdefault("notify", {})["feishu_webhook"] = os.getenv("FEISHU_WEBHOOK")
+    data.setdefault("notify", {})["feishu_verification_token"] = os.getenv("FEISHU_VERIFICATION_TOKEN")
+    data.setdefault("notify", {})["public_base_url"] = os.getenv("PUBLIC_BASE_URL")
     return Settings.model_validate(data)
