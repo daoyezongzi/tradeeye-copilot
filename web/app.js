@@ -1001,6 +1001,9 @@ async function loadDisclosureDay(date) {
         pollDisclosureJob(state.activeJobId).catch((error) => {
           clearInterval(state.jobPollTimer);
           state.jobPollTimer = null;
+          // 轮询挂了就再也没有 finishDisclosureJob 来清 activeJobId，
+          // 这里不清的话 loadDisclosureDay 的守卫会永久拦住下一次扫描
+          state.activeJobId = null;
           scanProgress.hide();
           setScanState("idle");
           setStatus({ error: error.message });

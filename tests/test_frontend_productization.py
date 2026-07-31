@@ -173,6 +173,9 @@ def test_disclosure_scan_uses_cancellable_job_polling(html, js):
     # disabled 只有一个赋值点，锁住"收敛"这个不变量
     assert js.count("scanButton.disabled") == 1
     assert 'setScanState("cancelling")' in js
+    # 每条终止路径都要清 activeJobId，否则 loadDisclosureDay 的守卫会永久拦住下一次扫描：
+    # 正常收尾（finishDisclosureJob）与轮询失败 catch 各一处
+    assert js.count("state.activeJobId = null") == 2
     assert "/api/disclosure-day/jobs" in js
     assert "startDisclosureDayJob(date)" in js
     assert "getDisclosureDayJob(jobId)" in js
