@@ -127,6 +127,41 @@ python -m pytest -q --basetemp=.pytest_tmp
 - 前端未做真实 Tushare 大覆盖池压测；进度条为 indeterminate，因为后端未提供逐家进度事件。
 - 导出为前端内存数据导出，未提供后端导出接口。
 
+### 当前剩余待办
+
+#### P0：飞书交互与复核闭环
+
+- 飞书交互卡片：当前正式发送仍是 webhook 静态文本；下一阶段应改为飞书 interactive card。
+- Cloudflare Worker callback：按钮点击回调放到 Cloudflare Worker，提供公网 HTTPS callback。
+- Cloudflare D1 复核表：存储 `date / ts_code / period / rule_id / user / action / timestamp`，替代浏览器 localStorage 作为权威状态。
+- 飞书回调安全：需要校验飞书签名或 verification token，处理重复点击、幂等与异常响应。
+- 复核状态回流：前端与后端读取 D1 或同步后的 review 状态，进入人工复核 precision 链路。
+
+#### P0：部署形态
+
+- 前端静态托管：可用 GitHub Pages 或 Cloudflare Pages；若 Worker 也在 Cloudflare，Cloudflare Pages 更顺。
+- Python 分析后端部署：当前 FastAPI / Tushare / pandas / SQLite 不建议迁到 Cloudflare Worker；应部署到 Render、Railway、Fly.io、轻量云服务器等 Python 友好的平台。
+- 详情 URL：当前是 hash route；正式飞书卡片需要可公网访问的详情页 URL。
+- Secrets 管理：`TUSHARE_TOKEN`、`FEISHU_WEBHOOK`、飞书 App Secret、Cloudflare 绑定均走环境变量或平台 secret，不写入仓库。
+
+#### P1：正式覆盖池与运行效率
+
+- 当前 100 支仍是烟测池，需要替换为真实关注股票池，并通过 watchlist loader 校验公司名与行业路由。
+- 后端已支持单次 `DisclosureAnalysisBundle` 复用，但真实大覆盖池还需要记录耗时、Tushare 调用次数、重试次数与失败分布。
+- 飞书长文本已支持分段，但最终卡片应改为短摘要 + 分组按钮 + 详情跳转，而不是靠多段长文本阅读。
+
+#### P1：行业规则与质量评估
+
+- 银行目前只做了 hard-check 分流，尚未实现净息差、不良率、拨备覆盖率、资本充足率等真实银行指标。
+- 券商、保险、地产、公用事业等行业规则包仍待真实失败样本驱动，不预先臆造规则。
+- 真实披露季 benchmark、人工复核 precision、误报分析与阈值校准仍未完成。
+
+#### P2：自动化与归因
+
+- 自动触发仍未做：scheduler、系统定时任务、RSS retry queue、失败重试 daemon 均待实现。
+- 后端导出接口未做：目前 CSV/JSON 由前端内存导出。
+- PDF / LLM 归因仍未接入真实卡片；接入前需满足 PDF 获取、章节抽取、token/latency 预算与失败降级 gate。
+
 ## 2026-07-30
 
 ### Real Data Disclosure Event 已完成
