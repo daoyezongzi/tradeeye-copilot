@@ -3,152 +3,152 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-teal.svg)](https://fastapi.tiangolo.com/)
 
-**TradeEye Copilot** is an A-share (China) earnings-disclosure anomaly copilot for buy-side research analysts. When a company's quarterly report lands, it outputs **structured financial facts**, **rule-driven anomaly findings**, **traceable evidence**, **attribution summaries**, and **market context** — not another summary to read.
+**TradeEye Copilot** 是面向买方研究员（PM / 分析师）的 A 股财报披露即时研判系统。财报落地后，系统输出**结构化财务事实**、**规则驱动的异常发现**、**可溯源的依据**、**归因摘要**与**市场上下文**——而不是又一份需要读完的财报摘要。
 
-> [简体中文](README.zh-CN.md) | English
-
----
-
-## Table of Contents
-
-- [What is TradeEye Copilot?](#what-is-tradeeye-copilot)
-- [Why this design](#why-this-design)
-- [Core design principles](#core-design-principles)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Quick start](#quick-start)
-- [Usage](#usage)
-- [Configuration reference](#configuration-reference)
-- [Rule engine](#rule-engine)
-- [Feishu notifications](#feishu-notifications)
-- [Automated scheduling](#automated-scheduling)
-- [LLM usage (Ascend MaaS)](#llm-usage-ascend-maas)
-- [Agent fact contract](#agent-fact-contract)
-- [Evaluation & benchmark](#evaluation--benchmark)
-- [Project structure](#project-structure)
-- [Testing](#testing)
-- [Compliance boundary](#compliance-boundary)
-- [Related projects](#related-projects)
-- [Docs & references](#docs--references)
+> 简体中文 | [English](README.en.md)
 
 ---
 
-## What is TradeEye Copilot?
+## 目录
 
-TradeEye Copilot is a lightweight collaborative research assistant purpose-built for buy-side institutions (PMs and analysts). During disclosure season, analysts do not lack earnings summaries — they lack **prioritization** and **reproducible anomaly detection**.
+- [这是什么](#这是什么)
+- [为什么这样设计](#为什么这样设计)
+- [核心设计原则](#核心设计原则)
+- [功能特性](#功能特性)
+- [架构](#架构)
+- [快速开始](#快速开始)
+- [使用指南](#使用指南)
+- [配置参考](#配置参考)
+- [规则引擎](#规则引擎)
+- [飞书推送](#飞书推送)
+- [自动化调度](#自动化调度)
+- [LLM 使用（外部 LLM API）](#llm-使用外部-llm-api)
+- [Agent 事实契约](#agent-事实契约)
+- [评估与基准](#评估与基准)
+- [项目结构](#项目结构)
+- [测试](#测试)
+- [合规边界](#合规边界)
+- [相关项目](#相关项目)
+- [文档与参考](#文档与参考)
 
-The project reframes the core problem from *"summarize the earnings report"* to *"find the questions worth asking."*
+---
 
-The system covers a configurable watchlist (default: **100 A-share companies**), scans disclosure calendar events every working day, runs deterministic financial checks, and delivers:
+## 这是什么
 
-- A **daily briefing** ranking companies by anomaly severity
-- **Company research cards** with four layers: facts → anomalies → attribution → market context
-- **Evidence drill-down** — every finding carries `Evidence(source, field, period, value)`
-- **Quarterly review** of coverage, rule hits, and human-review precision
-- **Feishu push** of a formal disclosure summary to a group chat
+TradeEye Copilot 是专为买方机构打造的轻量级协同投研助手。披露高峰期研究员不缺财报摘要，缺的是**优先级排序**与**可复核的异常发现**。
 
-## Why this design
+本项目把主线从"总结财报"改为"**找出值得追问的问题**"。
 
-| Problem | TradeEye Copilot's answer |
+系统覆盖可配置的覆盖池（默认 **100 家 A 股公司**），每个工作日扫描披露日历事件，运行确定性财务校验，并交付：
+
+- **当日汇总**：按异常严重度排序的公司全量覆盖视图
+- **公司研判卡**：事实 → 异常 → 归因 → 市场四层结构
+- **依据溯源**：每条 finding 携带 `Evidence(source, field, period, value)`，可下钻到原始数值
+- **季度复盘**：覆盖池、规则命中数、人工复核精确率
+- **飞书推送**：正式披露摘要文本推送至群聊
+
+## 为什么这样设计
+
+| 问题 | TradeEye Copilot 的解法 |
 | --- | --- |
-| LLM hallucinates numbers in serious financial contexts | **LLM never touches arithmetic.** Financial figures come from Tushare + pandas and pass script-level hard checks; the LLM only judges wording and writes attribution |
-| Multi-agent negotiation is slow and token-hungry | **Single-pass analysis**: one scan produces both the daily summary and the scan result — Feishu/Web never re-request Tushare |
-| Chatbot prompts block non-technical users | **Zero-prompt GUI**: a Web workbench with one-click scan, in-place refresh, and Feishu card push; an Agent question bar is reserved as a future interface |
-| Hard-check failures silently degrade quality | **Hard gate**: incomplete data or failed cross-validation blocks the research card instead of emitting a fake "no issue" verdict |
+| 严肃金融场景下 LLM 处理数字会幻觉 | **LLM 永不接触算术**。财务数字来自 Tushare + pandas，经脚本级硬校验；LLM 只做措辞判断与文字归因 |
+| 多 Agent 动态协商耗时、耗 token | **单次分析聚合**：一次扫描同时产出当日汇总与扫描结果，飞书/Web 不再重复请求 Tushare |
+| Chatbot 对话框有 Prompt 门槛 | **零 Prompt GUI**：Web 工作台一键扫描、原位刷新，飞书卡片推送；Agent 问答栏作为预留接口 |
+| 硬校验失败会静默降质 | **硬门禁**：数据不完整或交叉验算失败时阻断研判卡，而不是伪造"未见异常" |
 
-## Core design principles
+## 核心设计原则
 
-1. **Deterministic pipeline first.** All core financial metrics are extracted and cross-validated by deterministic code. Accuracy does not depend on model luck.
-2. **Evidence over assertion.** Every anomaly finding is bound to `Evidence(source, field, period, value)` and exposed in the UI for drill-down.
-3. **Single analysis pass.** Disclosure-day analysis is aggregated once; downstream consumers (Web, Feishu, automation) reuse the result.
-4. **Resumable, cancellable scans.** Disclosure scans are job-based and persisted in SQLite — partial runs can be resumed with `skip_ts_codes`, and cancellation is a safe stop between companies.
-5. **Banking-aware rules.** Banks take a minimal hard-check branch (no fabricated industry rules) — coverage without hallucinated domain logic.
-6. **Facts are the only interface.** `CompanyCard.facts` is the single fact interface for Agent interaction; agents never compute financial numbers (see [Agent fact contract](#agent-fact-contract)).
+1. **确定性管道优先**。所有核心财务指标由确定性代码提取并交叉校验，准确率不依赖模型运气。
+2. **依据胜过断言**。每条异常 finding 绑定 `Evidence(source, field, period, value)`，UI 可下钻查看。
+3. **单次分析**。披露日分析聚合一次，Web / 飞书 / 自动化全部复用结果。
+4. **可恢复、可取消的扫描**。披露扫描 job 化并持久化到 SQLite，部分运行可通过 `skip_ts_codes` 续扫；取消是公司/表间的安全停止。
+5. **银行感知的规则**。银行走最小 hard-check 分支（不臆造行业规则），覆盖但不幻觉。
+6. **事实是唯一接口**。`CompanyCard.facts` 是 Agent 交互的唯一事实接口；Agent 永不计算财务数字（见 [Agent 事实契约](#agent-事实契约)）。
 
-## Features
+## 功能特性
 
-### Disclosure scanning
-- Triggered by the **Tushare disclosure calendar**; optional RSS feed acts as a trigger hint (`copilot/rss/announcements.py` filters earnings titles, marks `DATA_PENDING` when Tushare is not ready)
-- Pulls three periods (current, previous quarter, year-ago) of four statements (income / balance sheet / cash flow / financial indicators) per company
-- **SQLite persistence** for snapshots, jobs, review labels, and notification logs
-- **Job store with resume**: `POST /api/disclosure-day/jobs`, `resume_from_job_id`, owner isolation via `X-TradeEye-Owner`, frontend 1-second polling
+### 披露扫描
+- 由 **Tushare 披露日历**触发；RSS 可选作为触发提示（`copilot/rss/announcements.py` 过滤财报标题，Tushare 未就绪时标记 `DATA_PENDING`）
+- 每家公司拉取三期（本期 / 上季 / 去年同期）四张表（利润表 / 资产负债表 / 现金流量表 / 财务指标）
+- **SQLite 持久化**：快照、job、复核标签、通知日志
+- **可续扫 job store**：`POST /api/disclosure-day/jobs`、`resume_from_job_id`、`X-TradeEye-Owner` 隔离、前端 1 秒轮询
 
-### Rule engine (deterministic arithmetic)
-Six arithmetic rules with thresholds from `config.yaml` (`rules.thresholds`):
+### 规则引擎（确定性算术）
+六条算术规则，阈值来自 `config.yaml`（`rules.thresholds`）：
 
-| Rule | Trigger |
+| 规则 | 触发条件 |
 | --- | --- |
-| Receivable divergence | Receivable growth vs. revenue growth gap ≥ 30 pp |
-| Inventory divergence | Inventory growth vs. revenue growth gap ≥ 30 pp |
-| Cash-flow quality | Operating cash flow / net profit < 50% |
-| Gross-margin change | |Δ gross margin| ≥ 5 pp |
-| Profit/revenue direction divergence | Net profit and revenue trend in opposite directions |
-| Non-recurring profit share | Non-recurring profit ≥ 30% of net profit |
+| 应收账款背离 | 应收账款增速与营收增速差值 ≥ 30 个百分点 |
+| 存货背离 | 存货增速与营收增速差值 ≥ 30 个百分点 |
+| 现金流质量 | 经营现金流 / 净利润 < 50% |
+| 毛利率异动 | \|毛利率变化\| ≥ 5 个百分点 |
+| 利润与营收方向背离 | 净利润与营收方向相反 |
+| 非经常性损益占比 | 非经常性损益占净利润 ≥ 30% |
 
-Plus a **management-tone finding** (`management_tone_weakened`, YELLOW) produced by the LLM comparing year-on-year wording of the PDF management discussion.
+另有 **管理层语气退坡** finding（`management_tone_weakened`，YELLOW）：LLM 对比 PDF 管理层讨论章节与去年同期措辞产出。
 
-### Research workbench (Web)
-- **Daily briefing** — header, lead-in, severity distribution bar (red / yellow / OK / data issues)
-- **Company research cards** — expandable; highest-severity card expanded by default
-- **Evidence drill-down popup** — per finding, showing the raw `Evidence` payload
-- **Review queue** — label findings TRUE/FALSE, persisted in the backend (`ts_code/period/rule_id` primary key)
-- **Quarterly review** — coverage pool, hits, rule distribution, human-review precision breakdowns (overall / by rule / by severity / by industry)
-- **Diagnostics & developer tools** — collapsed fold with scan status, jobs, and meta endpoints
-- **Export** — JSON / CSV menus; deep links `#/day/{date}`, `#/company/{ts_code}/{period}`
+### 研究工作台（Web）
+- **当日汇总**——报头、导语、严重度分布条（红 / 黄 / OK / 数据问题）
+- **公司研判卡**——可展开，默认展开最高分卡片
+- **依据溯源弹窗**——逐条 finding 展示原始 `Evidence` 数据
+- **复核队列**——标注 TRUE / FALSE，后端持久化（主键 `ts_code/period/rule_id`）
+- **季度复盘**——覆盖池、命中数、规则分布、精确率分解（总体 / 按规则 / 按严重度 / 按行业）
+- **诊断与开发者工具**——折叠区展示扫描状态、job 与 meta 接口
+- **导出**——JSON / CSV 菜单；深链 `#/day/{date}`、`#/company/{ts_code}/{period}`
 
-### Feishu notifications
-- Formal disclosure summary text (overview + all red/yellow anomalies + data issues; "no anomaly" companies counted only)
-- **Long-text segmentation** (`split_feishu_text`, 3500 chars/segment with `[i/n]` headers)
-- Idempotent de-duplication per date, **send logs**, **preview** and **manual resend** endpoints
-- Interactive card **callback** endpoint with challenge/verification-token checks (no public inbound webhook required)
+### 飞书推送
+- 正式披露摘要文本（总览 + 全部红/黄异常 + 数据问题；未见异常仅计数）
+- **长文本分段**（`split_feishu_text`，3500 字符/段，带 `[i/n]` 头）
+- 按日期**幂等去重**、**发送日志**、**预览**与**手动重发**接口
+- 交互卡片 **callback** 端点（challenge / verification token 校验），无需公网入站 webhook
 
-### Automation
-- `POST /api/automation/disclosure-day/cron` guarded by `X-Automation-Token` (`AUTOMATION_TRIGGER_TOKEN`)
-- GitHub Actions workflow `disclosure-automation.yml`: cron `"30 10 * * 1-5"` (10:30 UTC on weekdays) + `workflow_dispatch` with date/notify inputs
+### 自动化
+- `POST /api/automation/disclosure-day/cron`，由 `X-Automation-Token`（`AUTOMATION_TRIGGER_TOKEN`）保护
+- GitHub Actions 工作流 `disclosure-automation.yml`：cron `"30 10 * * 1-5"`（工作日 10:30 UTC）+ `workflow_dispatch`（date / notify 输入）
 
-## Architecture
+## 架构
 
 ```text
-Disclosure calendar -> Context assembly -> Hard validation -> Rule engine -> Report orchestration -> Web / Feishu
-                                          \-> PDF extraction -> Ascend LLM tone comparison / attribution
+披露日历 -> Context 装配 -> 硬校验 -> 规则引擎 -> 报告编排 -> Web / 飞书
+                               \-> PDF 原文抽取 -> LLM 语气对比/归因
 ```
 
-- **Deterministic pipeline**: Tushare → pandas → SQLite → hard check → rules. Numbers never pass through an LLM.
-- **Narrative module**: extracts the management-discussion section from PDFs, then uses the Ascend-compatible LLM (temperature 0.0) to compare wording vs. the prior period and emit a strict-JSON tone finding bound to the PDF section as evidence.
-- **API layer**: one `create_app()` factory shared by `real_app` (production, real services) — demo data app was removed.
-- **Frontend**: dependency-free vanilla JS workbench (`web/`) served by FastAPI static mounts, no build step.
+- **确定性管道**：Tushare → pandas → SQLite → 硬校验 → 规则。数字永不经过 LLM。
+- **Narrative 模块**：从 PDF 抽取管理层讨论章节，用 OpenAI 兼容 LLM（温度 0.0）对比去年同期措辞，输出严格 JSON 的语气 finding，以 PDF 章节作为 Evidence。
+- **API 层**：`create_app()` 工厂，`real_app`（正式版，真实服务）使用；demo 数据应用已移除。
+- **前端**：零依赖原生 JS 工作台（`web/`），由 FastAPI 静态挂载，无构建步骤。
 
-### Module layout
+### 模块结构
 
 ```text
 copilot/
-├── api/            # FastAPI app: real_app.py (production), app.py (create_app factory)
-├── checks/         # reconcile: cross-validation / hard checks
-├── datasource/     # tushare_client, calendar, fundamentals
-├── eval/           # backtest summary, real_backtest, manual review precision
-├── llm/            # OpenAI-compatible client (Ascend MaaS), failure degrades to None
-├── narrative/      # PDF extraction + tone comparison
-├── notify/         # Feishu rendering, long-text splitting
-├── report/         # company card / quarterly review builders
-├── rss/            # announcements trigger hint + polling service
-├── rules/          # arithmetic rule engine: base, divergence, caliber, registry
-├── service/        # analyzer, disclosure_scan (single-pass bundle), disclosure_jobs, review_store, notify_store
+├── api/            # FastAPI：real_app.py（正式入口）、app.py（create_app 工厂）
+├── checks/         # reconcile：交叉验算 / 硬校验
+├── datasource/     # tushare_client、calendar、fundamentals
+├── eval/           # backtest 汇总、real_backtest、人工复核精确率
+├── llm/            # OpenAI 兼容客户端，失败降级返回 None
+├── narrative/      # PDF 抽取 + 语气对比
+├── notify/         # 飞书渲染、长文本分段
+├── report/         # 公司研判卡 / 季度复盘构建器
+├── rss/            # 公告触发提示 + 轮询服务
+├── rules/          # 算术规则引擎：base、divergence、caliber、registry
+├── service/        # analyzer、disclosure_scan（单次聚合）、disclosure_jobs、review_store、notify_store
 ├── store/          # SQLite store
-├── scheduler.py    # automation cron trigger handler
-├── watchlist.py    # coverage pool YAML validation (code + name + industry)
-└── models.py       # pydantic models: Context, Evidence, Finding, PeriodSnapshot, ...
+├── scheduler.py    # 自动化 cron 触发处理
+├── watchlist.py    # 覆盖池 YAML 校验（代码 + 名称 + 行业）
+└── models.py       # pydantic 模型：Context、Evidence、Finding、PeriodSnapshot……
 ```
 
-## Quick start
+## 快速开始
 
-### Prerequisites
+### 环境要求
 
 - Python **≥ 3.11**
-- A [Tushare](https://tushare.pro/) token (financial data)
-- *(Optional)* An Ascend MaaS-compatible LLM endpoint (narrative tone findings)
-- *(Optional)* A Feishu custom-bot webhook (group push)
+- [Tushare](https://tushare.pro/) Token（财务数据）
+- *（可选）* OpenAI 兼容的 LLM 端点（语气 finding）
+- *（可选）* 飞书自定义机器人 webhook（群推送）
 
-### Install
+### 安装
 
 ```bash
 git clone git@github.com:daoyezongzi/tradeeye-copilot.git
@@ -158,203 +158,203 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-### Configure
+### 配置
 
 ```bash
 cp .env.example .env
 ```
 
-Then fill in the secrets (see [Configuration reference](#configuration-reference)):
+填入密钥（详见 [配置参考](#配置参考)）：
 
 ```bash
 TUSHARE_TOKEN=...
-ASCEND_API_KEY=...          # optional
-FEISHU_WEBHOOK=...          # optional
-AUTOMATION_TRIGGER_TOKEN=...  # optional, required for cron endpoint
-FEISHU_VERIFICATION_TOKEN=... # optional, for card callback
-PUBLIC_BASE_URL=...         # optional, public URL of the deployed app
+ASCEND_API_KEY=...            # 可选
+FEISHU_WEBHOOK=...            # 可选
+AUTOMATION_TRIGGER_TOKEN=...  # 可选，cron 接口需要
+FEISHU_VERIFICATION_TOKEN=... # 可选，卡片 callback 需要
+PUBLIC_BASE_URL=...           # 可选，部署实例的公网地址
 ```
 
-Non-secret settings live in `config.yaml`: coverage pool (100 companies), company names, industry routing, rule thresholds, LLM endpoint, PDF cache, eval window.
+非密钥配置在 `config.yaml`：覆盖池（100 家）、公司名、行业路由、规则阈值、LLM 端点、PDF 缓存、评估窗口。
 
-### Run
+### 运行
 
-**Windows (one click):**
+**Windows 一键启动：**
 
 ```bat
 start_real.bat
 ```
 
-It installs deps, opens `http://127.0.0.1:8000/`, and starts:
+脚本会安装依赖、打开 `http://127.0.0.1:8000/` 并启动：
 
 ```bash
 python -m uvicorn copilot.api.real_app:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open the dashboard and click `依据` (Evidence) on any finding to inspect the raw evidence JSON.
+打开工作台后，点击任意 finding 的 `依据` 即可查看原始证据 JSON。
 
-### Verify
+### 验证
 
 ```bash
 pytest -q
 ```
 
-## Usage
+## 使用指南
 
-### Analyst workflow (dashboard)
+### 研究员操作流程（工作台）
 
-1. Open `http://127.0.0.1:8000/` — the workbench shows the disclosure-day view.
-2. Pick a disclosure date and click **Start scan** (you can stop / cancel / resume — partial jobs are persisted).
-3. The **daily briefing** shows a severity distribution bar (red / yellow / OK / data issues).
-4. Click a company row to open its **research card** (facts → anomalies → attribution → market context).
-5. Click `依据` (Evidence) on any finding for the **evidence drill-down popup** with the exact source values.
-6. Label findings as TRUE / FALSE in the review queue — labels are stored in the backend and feed precision metrics.
-7. Click **Preview Feishu summary** to review the message, then **Send** (button disabled until a webhook is configured).
-8. Check **notification logs** for delivery results.
+1. 打开 `http://127.0.0.1:8000/`，进入披露日视图。
+2. 选择披露日期，点击 **开始扫描**（可停止 / 取消 / 恢复——部分完成的 job 会持久化）。
+3. **当日汇总**展示严重度分布条（红 / 黄 / OK / 数据问题）。
+4. 点击公司行展开**研判卡**（事实 → 异常 → 归因 → 市场）。
+5. 点击任意 finding 的 `依据` 打开**证据溯源弹窗**，查看精确的源数值。
+6. 在复核队列中标注 TRUE / FALSE——标签持久化到后端，并计入精确率指标。
+7. 点击 **预览飞书摘要** 检查文案，再点击 **发送**（未配置 webhook 时按钮禁用）。
+8. 在**通知日志**中查看投递结果。
 
-After deployment, the GitHub Actions cron (or any scheduler) calls the [automation endpoint](#automated-scheduling) so the flow runs unattended.
+部署后，GitHub Actions cron（或任意调度器）调用[自动化接口](#自动化调度)，流程即可无人值守运行。
 
-### API quick tour
+### API 速览
 
-| Method | Path | Purpose |
+| 方法 | 路径 | 作用 |
 | --- | --- | --- |
-| `GET` | `/api/meta` | App meta / capabilities |
-| `GET` | `/api/daily/{date}` | Daily briefing for a date (`YYYYMMDD`) |
-| `GET` | `/api/company/{ts_code}/{period}` | Company research card |
-| `GET` | `/api/evidence/{ts_code}/{period}/{rule_id}` | Evidence payload for one finding |
-| `GET` | `/api/quarterly` | Quarterly review aggregates |
-| `POST` | `/api/analyze/company` | Analyze one company |
-| `POST` | `/api/analyze/disclosure-day` | Analyze a disclosure day (single pass) |
-| `POST` | `/api/scan/disclosure-day` | Scan a disclosure day |
-| `POST` | `/api/disclosure-day/bundle` | Build analysis bundle |
-| `POST` | `/api/disclosure-day/jobs` | Start a resumable scan job |
-| `GET` | `/api/disclosure-day/jobs` | List jobs |
-| `GET` | `/api/disclosure-day/jobs/{job_id}` | Job status |
-| `POST` | `/api/disclosure-day/jobs/{job_id}/cancel` | Cancel a job (safe stop) |
-| `DELETE` | `/api/disclosure-day/jobs?keep_recent=N` | Clean up old jobs |
-| `GET` | `/api/reviews/labels.csv` | Review labels as CSV |
-| `GET` | `/api/reviews/metrics` | Precision breakdowns |
-| `POST` / `GET` | `/api/reviews/labels` | Upsert / list review labels |
-| `DELETE` | `/api/reviews/labels/{ts_code}/{period}/{rule_id}` | Delete a label |
-| `POST` | `/api/rss/poll` | Poll RSS feeds (trigger hint) |
-| `GET` | `/api/notify/logs?limit=20` | Notification send logs |
-| `POST` | `/api/notify/feishu/callback` | Feishu interactive card callback |
-| `POST` | `/api/notify/feishu/disclosure-day/{date}/preview` | Preview the summary text |
-| `POST` | `/api/notify/feishu/disclosure-day/{date}` | Send the summary to the webhook |
-| `POST` | `/api/automation/disclosure-day` | Automation trigger (no token) |
-| `POST` | `/api/automation/disclosure-day/cron` | Automation trigger (requires `X-Automation-Token`) |
+| `GET` | `/api/meta` | 应用元信息 / 能力 |
+| `GET` | `/api/daily/{date}` | 某披露日（`YYYYMMDD`）的当日汇总 |
+| `GET` | `/api/company/{ts_code}/{period}` | 公司研判卡 |
+| `GET` | `/api/evidence/{ts_code}/{period}/{rule_id}` | 单条 finding 的证据 |
+| `GET` | `/api/quarterly` | 季度复盘聚合 |
+| `POST` | `/api/analyze/company` | 分析单家公司 |
+| `POST` | `/api/analyze/disclosure-day` | 分析一个披露日（单次聚合） |
+| `POST` | `/api/scan/disclosure-day` | 扫描一个披露日 |
+| `POST` | `/api/disclosure-day/bundle` | 构建分析 bundle |
+| `POST` | `/api/disclosure-day/jobs` | 启动可续扫的扫描 job |
+| `GET` | `/api/disclosure-day/jobs` | 列出 jobs |
+| `GET` | `/api/disclosure-day/jobs/{job_id}` | 查看 job 状态 |
+| `POST` | `/api/disclosure-day/jobs/{job_id}/cancel` | 取消 job（安全停止） |
+| `DELETE` | `/api/disclosure-day/jobs?keep_recent=N` | 清理历史 jobs |
+| `GET` | `/api/reviews/labels.csv` | 复核标签 CSV |
+| `GET` | `/api/reviews/metrics` | 精确率分解 |
+| `POST` / `GET` | `/api/reviews/labels` | 写入 / 列出复核标签 |
+| `DELETE` | `/api/reviews/labels/{ts_code}/{period}/{rule_id}` | 删除标签 |
+| `POST` | `/api/rss/poll` | 轮询 RSS（触发提示） |
+| `GET` | `/api/notify/logs?limit=20` | 通知发送日志 |
+| `POST` | `/api/notify/feishu/callback` | 飞书交互卡片回调 |
+| `POST` | `/api/notify/feishu/disclosure-day/{date}/preview` | 预览摘要文本 |
+| `POST` | `/api/notify/feishu/disclosure-day/{date}` | 发送摘要到 webhook |
+| `POST` | `/api/automation/disclosure-day` | 自动化触发（无 token） |
+| `POST` | `/api/automation/disclosure-day/cron` | 自动化触发（需 `X-Automation-Token`） |
 
-The FastAPI interactive docs are available at `http://127.0.0.1:8000/docs` when running with `--reload` (or via the OpenAPI schema).
+本地运行时可在 `http://127.0.0.1:8000/docs` 查看 FastAPI 交互式文档（OpenAPI）。
 
-## Configuration reference
+## 配置参考
 
-### Environment variables (secrets only)
+### 环境变量（仅密钥）
 
-| Variable | Required | Description |
+| 变量 | 必填 | 说明 |
 | --- | --- | --- |
-| `TUSHARE_TOKEN` | Yes | Tushare data access token |
-| `ASCEND_API_KEY` | No | Ascend MaaS-compatible LLM API key (narrative tone) |
-| `FEISHU_WEBHOOK` | No | Feishu custom-bot webhook URL (group push) |
-| `AUTOMATION_TRIGGER_TOKEN` | No | Token required by the cron automation endpoint |
-| `FEISHU_VERIFICATION_TOKEN` | No | Verification token for Feishu card callback |
-| `PUBLIC_BASE_URL` | No | Public base URL used in card detail links (`notify.public_base_url`) |
+| `TUSHARE_TOKEN` | 是 | Tushare 数据访问 Token |
+| `ASCEND_API_KEY` | 否 | 外部 LLM API 密钥（语气对比） |
+| `FEISHU_WEBHOOK` | 否 | 飞书自定义机器人 webhook（群推送） |
+| `AUTOMATION_TRIGGER_TOKEN` | 否 | cron 自动化接口的访问令牌 |
+| `FEISHU_VERIFICATION_TOKEN` | 否 | 飞书卡片回调校验令牌 |
+| `PUBLIC_BASE_URL` | 否 | 卡片详情链接使用的公网地址（`notify.public_base_url`） |
 
-`.env` is auto-loaded and environment variables take precedence; secrets are validated for presence only, never printed.
+`.env` 自动加载且环境变量优先；密钥只做存在性校验，绝不打印。
 
-### config.yaml sections
+### config.yaml 配置节
 
-| Section | Purpose |
+| 配置节 | 作用 |
 | --- | --- |
-| `database` | SQLite path (default `data/tradeeye_copilot.sqlite`) |
-| `tushare` | Timeout / retry settings |
-| `llm` | `base_url`, `model`, `timeout_seconds` for the Ascend-compatible endpoint |
-| `narrative` | PDF cache dir, max section chars |
-| `notify` | `feishu_enabled` flag |
-| `eval` | `coverage_pool` (100 codes), `company_names`, `company_industries`, benchmark window & output path |
-| `rss` | Feed list, `max_entries` |
-| `rules.thresholds` | Thresholds for the six arithmetic rules |
+| `database` | SQLite 路径（默认 `data/tradeeye_copilot.sqlite`） |
+| `tushare` | 超时 / 重试设置 |
+| `llm` | OpenAI 兼容端点的 `base_url`、`model`、`timeout_seconds` |
+| `narrative` | PDF 缓存目录、章节最大字符数 |
+| `notify` | `feishu_enabled` 开关 |
+| `eval` | `coverage_pool`（100 个代码）、`company_names`、`company_industries`、基准窗口与输出路径 |
+| `rss` | 订阅源列表、`max_entries` |
+| `rules.thresholds` | 六条算术规则的阈值 |
 
-## Rule engine
+## 规则引擎
 
-Rules are **pure arithmetic functions** in `copilot/rules/` (`divergence.py`, `caliber.py`, `base.py`) — no LLM involved. Thresholds are configured in `config.yaml`; missing data yields `DATA_INCOMPLETE` / `NOT_EVALUATED` states instead of fake "no issue" verdicts. Banks route through a minimal hard-check branch (receivable / inventory / gross-margin rules exempted) — no fabricated industry logic.
+规则是 `copilot/rules/`（`divergence.py`、`caliber.py`、`base.py`）中的**纯算术纯函数**——不涉及 LLM。阈值在 `config.yaml` 中配置；数据不足时产出 `DATA_INCOMPLETE` / `NOT_EVALUATED` 状态，绝不伪造"未见异常"。银行通过最小 hard-check 分支（豁免应收 / 存货 / 毛利率规则）——不臆造行业逻辑。
 
-## Feishu notifications
+## 飞书推送
 
-- Rendered by `copilot/notify/feishu.py` (`render_formal_disclosure_text`)
-- Long messages are split into 3500-char segments with `[i/n]` headers
-- One message per date (idempotent), send logs stored in SQLite, manual resend supported
-- Interactive card callback endpoint verifies the verification token (challenge-style); no public inbound webhook is needed
+- 由 `copilot/notify/feishu.py` 渲染（`render_formal_disclosure_text`）
+- 长消息按 3500 字符分段，带 `[i/n]` 头
+- 按日期幂等（一天一条）、发送日志落 SQLite、支持手动重发
+- 交互卡片 callback 端点校验 verification token（challenge 式），无需公网入站 webhook
 
-## Automated scheduling
+## 自动化调度
 
-- GitHub Actions: `.github/workflows/disclosure-automation.yml`
-  - cron `"30 10 * * 1-5"` (10:30 UTC, weekdays)
-  - `workflow_dispatch` with `date` and `notify` inputs
-  - Requires secrets `TRADEEYE_API_BASE_URL` and `AUTOMATION_TRIGGER_TOKEN`
-- The workflow POSTs to `/api/automation/disclosure-day/cron` with `X-Automation-Token`; `copilot/scheduler.py` dispatches the disclosure-day automation with optional Feishu notify.
+- GitHub Actions：`.github/workflows/disclosure-automation.yml`
+  - cron `"30 10 * * 1-5"`（工作日 10:30 UTC）
+  - `workflow_dispatch` 支持 `date` 与 `notify` 输入
+  - 需要 Secrets `TRADEEYE_API_BASE_URL` 与 `AUTOMATION_TRIGGER_TOKEN`
+- 工作流向 `/api/automation/disclosure-day/cron` 发送 `X-Automation-Token`；`copilot/scheduler.py` 分发披露日自动化（可选飞书推送）
 
-## LLM usage (Ascend MaaS)
+## LLM 使用（外部 LLM API）
 
-- `copilot/llm/client.py` — OpenAI-compatible client; on failure returns `None` and the pipeline degrades gracefully
-- `copilot/narrative/extract.py` — extracts the management-discussion section from PDFs (cached in `narrative.pdf_cache_dir`)
-- `copilot/narrative/tone.py` — temperature **0.0**, strict-JSON output, compares current vs. year-ago wording → `management_tone_weakened` finding with the PDF section as evidence
-- **Guardrails**: the LLM never computes numbers; rules and hard checks are LLM-free; attribution is an *additional* finding, never a replacement for rule evidence.
+- `copilot/llm/client.py` —— OpenAI 兼容客户端；失败返回 `None`，管道优雅降级
+- `copilot/narrative/extract.py` —— 从 PDF 抽取管理层讨论章节（缓存于 `narrative.pdf_cache_dir`）
+- `copilot/narrative/tone.py` —— 温度 **0.0**、严格 JSON 输出，对比本期与去年同期措辞 → `management_tone_weakened` finding，以 PDF 章节为证据
+- **护栏**：LLM 永不计算数字；规则与硬校验完全不含 LLM；归因只是*附加* finding，绝不替代规则证据
 
-## Agent fact contract
+## Agent 事实契约
 
-The system reserves a headless-Agent question bar (Agent interface endpoints are defined; the Web UI reuses the current workbench). The contract (spec: [2026-08-01 agent fact contract design](docs/superpowers/specs/2026-08-01-agent-fact-contract-design.md)):
+系统预留无头 Agent 问答栏（Agent 接口已定义，前端复用现有工作台）。契约核心（spec：[2026-08-01 Agent 事实契约设计](docs/superpowers/specs/2026-08-01-agent-fact-contract-design.md)）：
 
-- **`CompanyCard.facts` is the single fact interface** — agents must not derive numbers from rendered text
-- `Fact` states: `VERIFIED` (requires value + evidence, period/value consistency checked) / `UNAVAILABLE` / `INVALID` / `NOT_APPLICABLE`
-- Every fact carries `FactEvidence(evidence_id, source, field, period, value)` for traceability
-- `RuleResultStatus`: `HIT` / `MISS` / `NOT_EVALUATED` / `BLOCKED` — insufficient data must not masquerade as `MISS`
-- `CardStatus`: `OK` / `PARTIAL` / `BLOCKED` (partial blocking)
-- Agent answers never override `facts` / `findings` / `rule_results`
+- **`CompanyCard.facts` 是唯一事实接口**——Agent 不得从渲染文本反推数字
+- `Fact` 状态：`VERIFIED`（必须 value + evidence，且 period/value 一致）/ `UNAVAILABLE` / `INVALID` / `NOT_APPLICABLE`
+- 每条事实携带 `FactEvidence(evidence_id, source, field, period, value)` 溯源
+- `RuleResultStatus`：`HIT` / `MISS` / `NOT_EVALUATED` / `BLOCKED`——数据不足不得用 `MISS` 冒充未见异常
+- `CardStatus`：`OK` / `PARTIAL` / `BLOCKED`（局部阻断）
+- Agent 回答不得反向覆盖 `facts` / `findings` / `rule_results`
 
-## Evaluation & benchmark
+## 评估与基准
 
-- `eval/run_backtest.py` — deterministic benchmark scaffold; writes `artifacts/benchmark.json` (not committed)
-- `copilot/eval/real_backtest.py` — multi-day scan aggregation (`summarize_scan_counts`, failure grouping by status/industry/message)
-- `copilot/eval/manual_review.py` — `compute_precision_breakdown()`: overall / by rule / by severity / by industry; only TRUE/FALSE labels count, `UNREVIEWED` excluded
-- `eval/manual_review_template.csv` — template for human review (`ts_code, period, rule_id, label, notes, severity, industry`)
-- Review labels feed back through `/api/reviews/*`
+- `eval/run_backtest.py` —— 确定性基准脚手架，输出 `artifacts/benchmark.json`（不提交）
+- `copilot/eval/real_backtest.py` —— 多日扫描聚合（`summarize_scan_counts`、按 status/industry/message 分组失败）
+- `copilot/eval/manual_review.py` —— `compute_precision_breakdown()`：总体 / 按规则 / 按严重度 / 按行业；只计 TRUE/FALSE，`UNREVIEWED` 不计入
+- `eval/manual_review_template.csv` —— 人工复核模板（`ts_code, period, rule_id, label, notes, severity, industry`）
+- 复核标签通过 `/api/reviews/*` 回流
 
-## Project structure
+## 项目结构
 
 ```text
 .
-├── copilot/          # Backend package (API, services, rules, store, notify)
-├── web/              # Vanilla JS frontend workbench (index.html, app.js, components.js, styles.css)
-├── eval/             # Benchmark / manual review tooling
-├── tests/            # pytest suite (180+ tests)
-├── config.yaml       # Non-secret configuration
-├── start_real.bat    # One-click local startup (production app)
+├── copilot/          # 后端包（API、服务、规则、存储、通知）
+├── web/              # 原生 JS 前端工作台（index.html、app.js、components.js、styles.css）
+├── eval/             # 基准 / 人工复核工具
+├── tests/            # pytest 套件（180+ 测试）
+├── config.yaml       # 非密钥配置
+├── start_real.bat    # 一键本地启动（正式应用）
 ├── .github/workflows/disclosure-automation.yml
-└── docs/             # Development log, specs, and plans
+└── docs/             # 开发日志、spec 与 plan
 ```
 
-## Testing
+## 测试
 
 ```bash
 pytest -q
 ```
 
-The suite covers API routes, rule arithmetic, disclosure scan bundles, job store persistence/resume, Feishu rendering & segmentation, review store & metrics, config validation, watchlist validation, and frontend contracts.
+套件覆盖：API 路由、规则算术、披露扫描 bundle、job store 持久化/续扫、飞书渲染与分段、复核存储与指标、配置校验、覆盖池校验、前端契约。
 
-## Compliance boundary
+## 合规边界
 
-TradeEye Copilot only presents facts, rule-triggered anomalies, source evidence, and market-reaction context. It does **not** output investment advice, target prices, or buy/sell/hold recommendations.
+TradeEye Copilot 仅呈现事实、规则触发的异常、来源证据与市场反应上下文。它**不**输出投资建议、目标价或买卖评级。
 
-## Related projects
+## 相关项目
 
-- [daoyezongzi/TradeEye](https://github.com/daoyezongzi/TradeEye) — data acquisition, perception pipeline, and Feishu push mechanism
-- [daoyezongzi/PlatoAcademy](https://github.com/daoyezongzi/PlatoAcademy) — headless Skill-Agent orchestration, RAG retrieval, and inference (interaction reference)
+- [daoyezongzi/TradeEye](https://github.com/daoyezongzi/TradeEye) —— 数据抓取、感知管道与飞书推送机制
+- [daoyezongzi/PlatoAcademy](https://github.com/daoyezongzi/PlatoAcademy) —— 无头 Skill Agent 编排、RAG 检索与推理（交互参考）
 
-## Docs & references
+## 文档与参考
 
-- [Development log](docs/development-log.md) — chronological implementation notes
-- [Specs & plans](docs/superpowers/) — design specs and implementation plans:
-  - [Agent fact contract design](docs/superpowers/specs/2026-08-01-agent-fact-contract-design.md)
-  - [Real-data disclosure event design](docs/superpowers/specs/2026-07-29-real-data-disclosure-event-design.md)
-  - [Scan entry consolidation design](docs/superpowers/specs/2026-07-31-scan-entry-consolidation-design.md)
-- [Submission checklist](docs/submission-checklist.md)
+- [开发日志](docs/development-log.md) —— 按时间顺序的实现记录
+- [Spec 与 Plan](docs/superpowers/) —— 设计规格与实施计划：
+  - [Agent 事实契约设计](docs/superpowers/specs/2026-08-01-agent-fact-contract-design.md)
+  - [真实数据披露事件设计](docs/superpowers/specs/2026-07-29-real-data-disclosure-event-design.md)
+  - [扫描入口整合设计](docs/superpowers/specs/2026-07-31-scan-entry-consolidation-design.md)
+- [提交清单](docs/submission-checklist.md)
