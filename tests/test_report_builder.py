@@ -102,4 +102,60 @@ def test_build_company_card_preserves_legacy_call_and_defaults_structured_fields
     assert card.facts == []
     assert card.rule_results == []
     assert card.card_status == CardStatus.OK
-    assert all(item.status != FactStatus.VERIFIED for item in card.facts)
+
+
+from pydantic import ValidationError
+import pytest
+
+from copilot.models import Fact, FactStatus
+from copilot.report.builder import CompanyCard
+
+
+def test_company_card_rejects_ok_with_invalid_fact():
+    fact = Fact(
+        fact_id="revenue",
+        label="营业收入",
+        period="20250630",
+        status=FactStatus.INVALID,
+        reason_code="HARD_CHECK_FAILED",
+        reason="校验失败",
+    )
+    with pytest.raises(ValidationError):
+        CompanyCard(
+            ts_code="000001.SZ",
+            period="20250630",
+            fact_line="营收 NA",
+            findings=[],
+            facts=[fact],
+        )
+
+
+def test_company_card_accepts_partial_with_invalid_fact():
+    fact = Fact(
+        fact_id="revenue",
+        label="营业收入",
+        period="20250630",
+        status=FactStatus.INVALID,
+        reason_code="HARD_CHECK_FAILED",
+        reason="校验失败",
+    )
+    card = CompanyCard(
+        ts_code="000001.SZ",
+        period="20250630",
+        fact_line="营收 NA",
+        findings=[],
+        facts=[fact],
+        card_status="PARTIAL",
+    )
+    assert card.card_status == "PARTIAL"
+
+
+def test_company_card_allows_blocked_without_facts():
+    card = CompanyCard(
+        ts_code="000001.SZ",
+        period="20250630",
+        fact_line="",
+        findings=[],
+        card_status="BLOCKED",
+    )
+    assert card.facts == []

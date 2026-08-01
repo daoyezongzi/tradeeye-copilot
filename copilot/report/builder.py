@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from copilot.eval.backtest import BacktestSummary
 from copilot.models import (
@@ -27,6 +27,14 @@ class CompanyCard(BaseModel):
     card_status: CardStatus = CardStatus.OK
     facts: list[Fact] = Field(default_factory=list)
     rule_results: list[RuleResult] = Field(default_factory=list)
+    @model_validator(mode="after")
+    def validate_status(self):
+        incomplete = any(fact.status.value in {"UNAVAILABLE", "INVALID"} for fact in self.facts)
+        if self.card_status == CardStatus.OK and incomplete:
+            raise ValueError("OK card cannot contain unavailable or invalid facts")
+        if self.card_status == CardStatus.PARTIAL and not incomplete:
+            raise ValueError("PARTIAL card requires unavailable or invalid facts")
+        return self
 
 
 class DailySummary(BaseModel):

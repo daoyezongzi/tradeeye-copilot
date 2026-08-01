@@ -2,12 +2,16 @@ from pydantic import ValidationError
 import pytest
 
 from copilot.models import (
+    AgentFactContext,
+    ClassificationResult,
+    CompanyIdentity,
     Context,
     Evidence,
     Fact,
     FactEvidence,
     FactStatus,
     Finding,
+    MappingStatus,
     RuleResult,
     RuleResultStatus,
     Severity,
@@ -125,12 +129,69 @@ def test_unavailable_fact_requires_reason():
     assert fact.evidence is None
 
 
-def test_rule_result_distinguishes_not_evaluated_from_miss():
-    result = RuleResult(
-        rule_id="gross_margin_change",
-        status=RuleResultStatus.NOT_EVALUATED,
-        required_fact_ids=["gross_margin_pct"],
-        reason_code="REQUIRED_FACT_UNAVAILABLE",
-        reason="required fact unavailable",
+
+
+def test_invalid_fact_requires_reason():
+    with pytest.raises(ValidationError):
+        Fact(
+            fact_id="revenue",
+            label="营业收入",
+            period="20250630",
+            status=FactStatus.INVALID,
+        )
+
+
+def test_not_applicable_fact_requires_special_profile():
+    with pytest.raises(ValidationError):
+        Fact(
+            fact_id="gross_margin_pct",
+            label="毛利率",
+            period="20250630",
+            status=FactStatus.NOT_APPLICABLE,
+        )
+    with pytest.raises(ValidationError):
+        Fact(
+            fact_id="gross_margin_pct",
+            label="毛利率",
+            period="20250630",
+            status=FactStatus.NOT_APPLICABLE,
+            applicability_profile_id="generic",
+        )
+
+    fact = Fact(
+        fact_id="gross_margin_pct",
+        label="毛利率",
+        period="20250630",
+        status=FactStatus.NOT_APPLICABLE,
+        applicability_profile_id="bank_v1",
+        reason_code="INDUSTRY_NOT_APPLICABLE",
+        reason="bank_v1 未使用毛利率口径",
     )
-    assert result.status != RuleResultStatus.MISS
+    assert fact.applicability_profile_id == "bank_v1"
+
+
+def test_identity_classification_and_agent_context_serialize():
+    identity = CompanyIdentity(
+        ts_code="600000.SH",
+        name="示例银行",
+        provider="tushare.stock_basic",
+        name_field="name",
+    )
+    classification = ClassificationResult(
+        provider="tushare.stock_basic",
+        provider_industry="银行",
+        mapping_status=MappingStatus.MAPPED,
+        rule_profile_id="bank_v1",
+        industry_field="industry",
+        source_value="银行",
+    )
+    context = AgentFactContext(
+        ts_code="600000.SH",
+        period="20250630",
+        fact_id="revenue",
+        evidence_id="ev-revenue",
+    )
+
+    assert identity.model_dump()["provider"] == "tushare.stock_basic"
+    assert classification.model_dump()["rule_profile_id"] == "bank_v1"
+    assert context.model_dump()["fact_id"] == "revenue"

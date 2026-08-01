@@ -126,6 +126,7 @@ class Fact(BaseModel):
     evidence: FactEvidence | None = None
     reason_code: str | None = None
     reason: str | None = None
+    applicability_profile_id: str | None = None
 
     @model_validator(mode="after")
     def validate_status(self) -> "Fact":
@@ -139,6 +140,11 @@ class Fact(BaseModel):
         elif self.status in {FactStatus.UNAVAILABLE, FactStatus.INVALID}:
             if not self.reason_code or not self.reason:
                 raise ValueError("unavailable or invalid fact requires reason")
+        elif self.status == FactStatus.NOT_APPLICABLE:
+            if not self.applicability_profile_id or self.applicability_profile_id == "generic":
+                raise ValueError("not applicable fact requires special profile")
+            if not self.reason_code or not self.reason:
+                raise ValueError("not applicable fact requires reason")
         return self
 
 
