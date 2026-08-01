@@ -1,9 +1,13 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_serializer, model_validator
 
 
 class AgentReference(BaseModel):
     fact_id: str | None = None
     evidence_id: str | None = None
+
+    @model_serializer
+    def serialize(self) -> dict:
+        return {key: value for key, value in self.__dict__.items() if value is not None}
 
     @model_validator(mode="after")
     def validate_reference(self) -> "AgentReference":
