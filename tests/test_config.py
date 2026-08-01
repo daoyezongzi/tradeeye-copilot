@@ -155,3 +155,36 @@ database:
     settings = load_settings(config_path)
 
     assert settings.automation.trigger_token == "cron-secret"
+
+
+def test_load_settings_reads_llm_from_env(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "database:\n  path: tmp/app.sqlite\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.com/v1")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    monkeypatch.setenv("ASCEND_API_KEY", "env-key")
+
+    settings = load_settings(config_path, env_path=tmp_path / "missing.env")
+
+    assert settings.llm.base_url == "https://llm.example.com/v1"
+    assert settings.llm.model == "test-model"
+    assert settings.llm.api_key == "env-key"
+
+
+def test_load_settings_keeps_llm_defaults_without_env(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "database:\n  path: tmp/app.sqlite\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("ASCEND_API_KEY", raising=False)
+
+    settings = load_settings(config_path, env_path=tmp_path / "missing.env")
+
+    assert settings.llm.base_url == "https://maas.example.com/v1"
+    assert settings.llm.model == "ascend-compatible-model"
