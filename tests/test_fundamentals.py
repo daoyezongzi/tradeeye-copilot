@@ -1,10 +1,31 @@
 import pandas as pd
 import pytest
 
-from copilot.datasource.fundamentals import TushareFundamentalsClient, TushareFetchCancelled, normalize_financial_snapshot
+from copilot.datasource.fundamentals import (
+    TushareFundamentalsClient,
+    TushareFetchCancelled,
+    normalize_company_profile,
+    normalize_financial_snapshot,
+)
 
 
-def test_normalize_financial_snapshot_combines_four_tables():
+def test_normalize_company_profile_reads_identity_and_industry():
+    profile = normalize_company_profile(
+        "600000.SH",
+        pd.DataFrame([{"ts_code": "600000.SH", "name": "示例银行", "industry": "银行"}]),
+    )
+
+    assert profile.ts_code == "600000.SH"
+    assert profile.name == "示例银行"
+    assert profile.provider_industry == "银行"
+    assert profile.source == "tushare.stock_basic"
+
+
+def test_normalize_company_profile_keeps_empty_industry_unresolved():
+    profile = normalize_company_profile("600000.SH", pd.DataFrame())
+
+    assert profile.name is None
+    assert profile.provider_industry is None
     income = pd.DataFrame([
         {"ts_code": "000001.SZ", "end_date": "20250630", "ann_date": "20250821", "revenue": 100.0, "n_income_attr_p": 10.0}
     ])
