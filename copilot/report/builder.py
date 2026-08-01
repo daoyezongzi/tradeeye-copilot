@@ -28,8 +28,16 @@ class CompanyCard(BaseModel):
     facts: list[Fact] = Field(default_factory=list)
     rule_results: list[RuleResult] = Field(default_factory=list)
     @model_validator(mode="after")
-    def validate_status(self):
+    def validate_status(self) -> "CompanyCard":
         incomplete = any(fact.status.value in {"UNAVAILABLE", "INVALID"} for fact in self.facts)
+        not_applicable = [fact for fact in self.facts if fact.status.value == "NOT_APPLICABLE"]
+        for fact in not_applicable:
+            if (
+                self.classification is None
+                or self.classification.mapping_status.value != "MAPPED"
+                or self.classification.rule_profile_id != fact.applicability_profile_id
+            ):
+                raise ValueError("not applicable fact requires matching mapped classification")
         if self.card_status == CardStatus.OK and incomplete:
             raise ValueError("OK card cannot contain unavailable or invalid facts")
         if self.card_status == CardStatus.PARTIAL and not incomplete:

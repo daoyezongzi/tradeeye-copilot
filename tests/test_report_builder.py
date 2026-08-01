@@ -104,6 +104,60 @@ def test_build_company_card_preserves_legacy_call_and_defaults_structured_fields
     assert card.card_status == CardStatus.OK
 
 
+def test_company_card_rejects_not_applicable_fact_without_matching_profile():
+    fact = Fact(
+        fact_id="gross_margin_pct",
+        label="毛利率",
+        period="20250630",
+        status=FactStatus.NOT_APPLICABLE,
+        applicability_profile_id="bank_v1",
+        reason_code="INDUSTRY_NOT_APPLICABLE",
+        reason="bank_v1 未使用毛利率口径",
+    )
+    classification = ClassificationResult(
+        provider="tushare.stock_basic",
+        provider_industry="银行",
+        mapping_status=MappingStatus.MAPPED,
+        rule_profile_id="other_v1",
+    )
+    with pytest.raises(ValidationError):
+        CompanyCard(
+            ts_code="000001.SZ",
+            period="20250630",
+            fact_line="",
+            findings=[],
+            classification=classification,
+            facts=[fact],
+        )
+
+
+def test_company_card_accepts_not_applicable_fact_from_mapped_profile():
+    fact = Fact(
+        fact_id="gross_margin_pct",
+        label="毛利率",
+        period="20250630",
+        status=FactStatus.NOT_APPLICABLE,
+        applicability_profile_id="bank_v1",
+        reason_code="INDUSTRY_NOT_APPLICABLE",
+        reason="bank_v1 未使用毛利率口径",
+    )
+    classification = ClassificationResult(
+        provider="tushare.stock_basic",
+        provider_industry="银行",
+        mapping_status=MappingStatus.MAPPED,
+        rule_profile_id="bank_v1",
+    )
+    card = CompanyCard(
+        ts_code="000001.SZ",
+        period="20250630",
+        fact_line="",
+        findings=[],
+        classification=classification,
+        facts=[fact],
+    )
+    assert card.facts[0].status == FactStatus.NOT_APPLICABLE
+
+
 from pydantic import ValidationError
 import pytest
 
