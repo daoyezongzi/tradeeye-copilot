@@ -94,12 +94,13 @@ def test_company_card_serializes_structured_contract():
     assert payload["rule_results"][0]["status"] == "MISS"
 
 
-def test_build_company_card_preserves_legacy_call_and_defaults_structured_fields(make_snapshot):
+def test_build_company_card_preserves_legacy_call_and_builds_verified_facts(make_snapshot):
     ctx = Context(ts_code="000001.SZ", current=make_snapshot())
 
     card = build_company_card(ctx, [])
 
-    assert card.facts == []
+    assert len(card.facts) == 5
+    assert all(fact.status == FactStatus.VERIFIED for fact in card.facts)
     assert card.rule_results == []
     assert card.card_status == CardStatus.OK
 
@@ -213,3 +214,24 @@ def test_company_card_allows_blocked_without_facts():
         card_status="BLOCKED",
     )
     assert card.facts == []
+
+
+def test_build_company_card_includes_verified_facts_with_evidence(make_snapshot):
+    ctx = Context(ts_code="000001.SZ", current=make_snapshot(revenue=128.4))
+    card = build_company_card(ctx, [], classification=None)
+
+    revenue = next(item for item in card.facts if item.fact_id == "revenue")
+    assert revenue.status == FactStatus.VERIFIED
+    assert revenue.period == "20250630"
+    assert revenue.evidence.source == "tushare.income"
+    assert revenue.evidence.field == "revenue"
+    assert revenue.evidence.value == 128.4
+
+
+def test_missing_fact_is_unavailable_and_card_is_partial(make_snapshot):
+    ctx = Context(ts_code="000001.SZ", current=make_snapshot(gross_margin_pct=None))
+    card = build_company_card(ctx, [], classification=None)
+
+    margin = next(item for item in card.facts if item.fact_id == "gross_margin_pct")
+    assert margin.status == FactStatus.UNAVAILABLE
+    assert card.card_status.value == "PARTIAL"

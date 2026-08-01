@@ -5,6 +5,7 @@ from copilot.models import Context, Evidence, Finding
 
 class Rule(Protocol):
     id: str
+    required_fact_ids: tuple[str, ...]
 
     def applies(self, ctx: Context) -> bool: ...
 
