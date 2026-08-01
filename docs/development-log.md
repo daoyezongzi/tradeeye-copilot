@@ -2,6 +2,25 @@
 
 ## 2026-08-02
 
+### 阶段归档:Agent 后端问答接口
+
+研究员问答闭环:一卡一会话的 SQLite 会话存储,单票问题用研判卡预置上下文回答,回答附带事实/证据引用并做真实性硬校验;跨票、披露汇总与扫描状态问题走白名单只读工具通道(JSON 协议,至多 2 次 LLM 调用)。LLM 接入从 .env 读取(LLM_BASE_URL / LLM_MODEL / ASCEND_API_KEY),config.yaml 默认值兜底;`POST /api/agent/chat` 无鉴权,与现有分析接口一致。自由文本审核器挂起为待办,不修改 `web/`。
+
+验证:
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+git diff --check
+```
+
+结果:
+
+```text
+228 passed
+```
+
+### 阶段归档:Agent 事实输出接口与行业分类预留
+
 ### 阶段归档：Agent 事实输出接口与行业分类预留
 
 本阶段只扩展后端接口，不修改 `web/`。保留 `CompanyCard` 旧字段，新增结构化 `facts`、`classification`、`rule_results`、`card_status`，为研判卡事实高亮和右侧 Agent 上下文预留稳定标识。

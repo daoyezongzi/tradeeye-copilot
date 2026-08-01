@@ -1,11 +1,15 @@
 from fastapi import HTTPException
 
+from copilot.agent.pipeline import AgentService
+from copilot.agent.store import SQLiteAgentStore
+from copilot.agent.tools import ToolRegistry
 from copilot.api.app import AppMeta, FeishuPreview, NotifyResult, create_app
 from copilot.config import load_settings
 from copilot.datasource.calendar import TushareDisclosureCalendarClient
 from copilot.datasource.fundamentals import TushareFundamentalsClient
 from copilot.datasource.tushare_client import TushareTokenMissing, create_tushare_pro
 from copilot.eval.backtest import BacktestSummary
+from copilot.llm.client import LLMClient
 from copilot.notify.feishu import FeishuNotifier, render_disclosure_interactive_card, render_formal_disclosure_text, split_feishu_text
 from copilot.report.builder import build_quarterly_review
 from copilot.scheduler import DisclosureAutomationJob, run_disclosure_automation_job
@@ -36,6 +40,22 @@ class RealReportService:
         self.notify_store.init_schema()
         self.store = SQLiteStore(self.settings.database.path)
         self.store.init_schema()
+        self.agent_store = SQLiteAgentStore(self.settings.database.path)
+        self.agent_store.init_schema()
+        self.agent_service = None
+        llm_settings = getattr(self.settings, "llm", None)
+        if llm_settings is not None and (llm_settings.api_key or llm_settings.base_url != "https://maas.example.com/v1"):
+            self.agent_service = AgentService(
+                store=self.agent_store,
+                llm=LLMClient(
+                    base_url=llm_settings.base_url,
+                    model=llm_settings.model,
+                    api_key=llm_settings.api_key,
+                    timeout_seconds=llm_settings.timeout_seconds,
+                ),
+                provider=self,
+                tool_registry=ToolRegistry(self),
+            )
         try:
             pro = create_tushare_pro(self.settings.tushare.token)
         except TushareTokenMissing:
@@ -256,4 +276,5 @@ class RealReportService:
         return NotifyResult(sent=sent, reason=reason)
 
 
-app = create_app(RealReportService())
+_service = RealReportService()
+app = create_app(_service, agent_service=_service.agent_service)
