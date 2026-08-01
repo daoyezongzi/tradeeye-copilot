@@ -1,5 +1,33 @@
 # TradeEye Copilot 开发日志
 
+## 2026-08-02
+
+### 阶段归档：Agent 事实输出接口与行业分类预留
+
+本阶段只扩展后端接口，不修改 `web/`。保留 `CompanyCard` 旧字段，新增结构化 `facts`、`classification`、`rule_results`、`card_status`，为研判卡事实高亮和右侧 Agent 上下文预留稳定标识。
+
+- Tushare 公司基础资料（`stock_basic`）提供外部行业标签；已配置标签映射到特殊 profile（当前 `银行: bank_v1`），未映射行业使用现有 generic 通用规则。
+- `resolve_classification()` 按确定性规则生成 `MAPPED` / `UNMAPPED` / `UNAVAILABLE`，`generic` 只表示通用规则 profile，不声称已确认行业。
+- 每个 `VERIFIED` 事实绑定报告期、工具来源、字段和原始值；缺失/无效事实不能生成 `MISS`，依赖规则为 `NOT_EVALUATED`。
+- `evaluate_rule_results()` 依据规则声明的 `required_fact_ids` 输出 `HIT` / `MISS` / `NOT_EVALUATED`；`run_rules()` 保留原 Finding 输出。
+- 卡片含 `UNAVAILABLE` / `INVALID` 事实时状态为 `PARTIAL`，其余已验证事实仍保留。
+- `AnalyzerService` 优先使用 Tushare profile，`company_industries` 保留为兼容路径；公司资料获取失败不阻断财务分析，生成 `UNAVAILABLE` 分类继续通用规则。
+- API 导出 `AgentFactContext` 作为契约预留，不实现对话接口；Agent 不参与数字计算、来源选择或规则判定。
+- 现有前端未修改，旧 `fact_line` 保留为兼容展示，结构化 `facts` 才是事实主数据。
+
+验证：
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+git diff --check HEAD~4..HEAD
+```
+
+结果：
+
+```text
+204 passed
+```
+
 ## 2026-07-31
 
 ### 阶段归档：开发者区自动化与飞书联调状态可视化
