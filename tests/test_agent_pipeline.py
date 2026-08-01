@@ -115,3 +115,35 @@ def test_llm_failure_raises_agent_llm_error(make_snapshot):
 
     with pytest.raises(AgentLLMError):
         service.answer_question("000001.SZ", "20250630", "营收多少?")
+
+
+def test_tool_call_retries_then_answers(make_snapshot):
+    from copilot.agent.tools import ToolRegistry
+
+    card = build_company_card(Context(ts_code="000001.SZ", current=make_snapshot()), [])
+    other = build_company_card(Context(ts_code="000002.SZ", current=make_snapshot(ts_code="000002.SZ")), [])
+    provider = FakeCardProvider(
+        {
+            ("000001.SZ", "20250630"): card,
+            ("000002.SZ", "20250630"): other,
+        }
+    )
+    store = FakeStore()
+    llm = FakeLLM('{"answer": "ok"}')
+    llm.responses = [
+        '{"tool": "get_company_card", "args": {"ts_code": "000002.SZ", "period": "20250630"}}',
+        '{"answer": "另一家营收是 100", "references": [{"fact_id": "revenue"}]}',
+    ]
+
+    service = AgentService(
+        store=store,
+        llm=llm,
+        provider=provider,
+        tool_registry=ToolRegistry(provider),
+    )
+
+    result = service.answer_question("000001.SZ", "20250630", "000002.SZ 营收多少?")
+
+    assert result.answer == "另一家营收是 100"
+    assert result.references == [AgentReference(fact_id="revenue")]
+    assert len(llm.responses) == 0
