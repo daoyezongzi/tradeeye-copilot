@@ -1,7 +1,16 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from copilot.eval.backtest import BacktestSummary
-from copilot.models import Context, Finding, Severity
+from copilot.models import (
+    CardStatus,
+    ClassificationResult,
+    CompanyIdentity,
+    Context,
+    Fact,
+    Finding,
+    RuleResult,
+    Severity,
+)
 
 
 class CompanyCard(BaseModel):
@@ -13,6 +22,11 @@ class CompanyCard(BaseModel):
     market_line: str = "市场数据待接入"
     max_severity: Severity | None = None
     max_score: float = 0.0
+    company: CompanyIdentity | None = None
+    classification: ClassificationResult | None = None
+    card_status: CardStatus = CardStatus.OK
+    facts: list[Fact] = Field(default_factory=list)
+    rule_results: list[RuleResult] = Field(default_factory=list)
 
 
 class DailySummary(BaseModel):

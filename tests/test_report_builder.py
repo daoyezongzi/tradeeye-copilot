@@ -1,5 +1,16 @@
-from copilot.models import Context, Evidence, Finding, Severity
-from copilot.report.builder import build_company_card, build_daily_summary
+from copilot.models import (
+    CardStatus,
+    ClassificationResult,
+    Context,
+    Evidence,
+    FactStatus,
+    Finding,
+    MappingStatus,
+    RuleResult,
+    RuleResultStatus,
+    Severity,
+)
+from copilot.report.builder import CompanyCard, build_company_card, build_daily_summary
 
 
 def finding(rule_id, severity, score):
@@ -41,3 +52,54 @@ def test_build_daily_summary_counts_severity(make_snapshot):
     assert summary.yellow_count == 1
     assert summary.ok_count == 1
     assert summary.cards[0].max_score == 80.0
+
+
+def test_legacy_company_card_data_keeps_new_fields_compatible():
+    card = CompanyCard(
+        ts_code="000001.SZ",
+        period="20250630",
+        fact_line="营收 128.4",
+        findings=[],
+    )
+
+    assert card.facts == []
+    assert card.rule_results == []
+    assert card.card_status == CardStatus.OK
+
+
+def test_company_card_serializes_structured_contract():
+    classification = ClassificationResult(
+        provider="tushare.stock_basic",
+        provider_industry="银行",
+        mapping_status=MappingStatus.MAPPED,
+        rule_profile_id="bank_v1",
+    )
+    rule_result = RuleResult(
+        rule_id="gross_margin_change",
+        status=RuleResultStatus.MISS,
+        required_fact_ids=["gross_margin_pct"],
+    )
+    card = CompanyCard(
+        ts_code="000001.SZ",
+        period="20250630",
+        fact_line="营收 128.4",
+        findings=[],
+        classification=classification,
+        facts=[],
+        rule_results=[rule_result],
+    )
+
+    payload = card.model_dump()
+    assert payload["classification"]["rule_profile_id"] == "bank_v1"
+    assert payload["rule_results"][0]["status"] == "MISS"
+
+
+def test_build_company_card_preserves_legacy_call_and_defaults_structured_fields(make_snapshot):
+    ctx = Context(ts_code="000001.SZ", current=make_snapshot())
+
+    card = build_company_card(ctx, [])
+
+    assert card.facts == []
+    assert card.rule_results == []
+    assert card.card_status == CardStatus.OK
+    assert all(item.status != FactStatus.VERIFIED for item in card.facts)
