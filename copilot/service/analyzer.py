@@ -5,17 +5,18 @@ from pydantic import BaseModel
 from copilot.checks.reconcile import CheckStatus, run_hard_checks
 from copilot.config import RuleThresholds
 from copilot.context import assemble_context, prior_quarter_period, prior_year_period
-from copilot.datasource.fundamentals import TushareFetchCancelled
-from copilot.industry import industry_for_ts_code
-from copilot.models import PeriodSnapshot
+from copilot.datasource.fundamentals import CompanyProfile, TushareFetchCancelled
+from copilot.industry import industry_for_ts_code, resolve_classification
+from copilot.models import ClassificationResult, MappingStatus, PeriodSnapshot
 from copilot.observability import RuntimeStats
-from copilot.report.builder import CompanyCard, DailySummary, build_company_card
-from copilot.rules.registry import build_rules, run_rules
+from copilot.report.builder import CompanyCard, DailySummary, build_company_card, build_facts
+from copilot.rules.registry import build_rules, evaluate_rule_results, run_rules
 from copilot.service.disclosure_scan import CompanyAnalysisStatus, DisclosureAnalysisBundle, DisclosureProgressEvent, DisclosureScanResult, build_analysis_bundle
 
 
 class FundamentalsProvider(Protocol):
     def fetch_snapshot(self, ts_code: str, period: str) -> PeriodSnapshot: ...
+    def fetch_company_profile(self, ts_code: str) -> CompanyProfile: ...
 
 
 class SnapshotStore(Protocol):
@@ -43,6 +44,7 @@ class AnalyzerService:
         coverage_pool: list[str] | None = None,
         calendar=None,
         company_industries: dict[str, str] | None = None,
+        industry_profiles: dict[str, str] | None = None,
         runtime_stats: RuntimeStats | None = None,
     ):
         self.fundamentals = fundamentals
@@ -51,6 +53,7 @@ class AnalyzerService:
         self.coverage_pool = coverage_pool or []
         self.calendar = calendar
         self.company_industries = company_industries or {}
+        self.industry_profiles = industry_profiles or {}
         self.runtime_stats = runtime_stats
 
     def _fetch_and_store(self, ts_code: str, period: str) -> PeriodSnapshot:
@@ -92,9 +95,31 @@ class AnalyzerService:
                     message="；".join(check.messages),
                 )
 
-            findings = run_rules(ctx, build_rules(self.thresholds))
+            try:
+                profile = self.fundamentals.fetch_company_profile(ts_code)
+                classification = resolve_classification(profile.provider_industry, self.industry_profiles)
+                company = profile.identity
+            except Exception:
+                classification = ClassificationResult(
+                    provider="tushare.stock_basic",
+                    mapping_status=MappingStatus.UNAVAILABLE,
+                    rule_profile_id="generic",
+                    industry_field="industry",
+                )
+                company = None
+
+            rules = build_rules(self.thresholds)
+            facts = build_facts(ctx)
+            rule_results = evaluate_rule_results(ctx, rules, facts=facts)
+            findings = run_rules(ctx, rules)
             self.store.replace_findings(ts_code, period, findings)
-            card = build_company_card(ctx, findings)
+            card = build_company_card(
+                ctx,
+                findings,
+                classification=classification,
+                rule_results=rule_results,
+                company=company,
+            )
             return CompanyAnalysisResult(status=CompanyAnalysisStatus.OK, message="ok", card=card)
         except TushareFetchCancelled:
             raise

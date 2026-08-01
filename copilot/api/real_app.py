@@ -54,6 +54,7 @@ class RealReportService:
                 coverage_pool=self.settings.eval.coverage_pool,
                 calendar=TushareDisclosureCalendarClient(pro),
                 company_industries=self.settings.eval.company_industries,
+                industry_profiles=self.settings.eval.industry_profiles,
             )
         self.rss_service = None
         if self.analyzer is not None:

@@ -51,8 +51,13 @@ def test_analyze_company_route(make_snapshot):
     response = client.post("/api/analyze/company", json={"ts_code": "000001.SZ", "period": "20250630"})
 
     assert response.status_code == 200
-    assert response.json()["status"] == "OK"
-    assert response.json()["card"]["ts_code"] == "000001.SZ"
+    payload = response.json()
+    assert payload["status"] == "OK"
+    assert payload["card"]["ts_code"] == "000001.SZ"
+    assert "facts" in payload["card"]
+    assert "classification" in payload["card"]
+    assert "rule_results" in payload["card"]
+    assert "fact_line" in payload["card"]
 
 
 def test_analyze_disclosure_day_route(make_snapshot):

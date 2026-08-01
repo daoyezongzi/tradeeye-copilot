@@ -1,5 +1,6 @@
+from copilot.datasource.fundamentals import CompanyProfile
 from copilot.industry import Industry
-from copilot.models import PeriodSnapshot
+from copilot.models import CompanyIdentity, PeriodSnapshot
 from copilot.service.analyzer import AnalyzerService, CompanyAnalysisStatus
 
 
@@ -7,6 +8,7 @@ class FakeFundamentals:
     def __init__(self, snapshots):
         self.snapshots = snapshots
         self.calls = []
+        self.company_profile = None
 
     def fetch_snapshot(self, ts_code, period):
         self.calls.append((ts_code, period))
@@ -14,6 +16,13 @@ class FakeFundamentals:
         if snapshot is None:
             return PeriodSnapshot(ts_code=ts_code, period=period)
         return snapshot
+
+    def fetch_company_profile(self, ts_code):
+        if self.company_profile is not None:
+            return self.company_profile
+        return CompanyProfile(
+            identity=CompanyIdentity(ts_code=ts_code, provider="tushare.stock_basic")
+        )
 
 
 class FakeStore:
@@ -109,6 +118,34 @@ def test_analyze_company_returns_data_incomplete_when_hard_check_fails():
     assert result.status == CompanyAnalysisStatus.DATA_INCOMPLETE
     assert "current.revenue is negative" in result.message
     assert result.card is None
+
+
+def test_analyze_company_attaches_classification_and_facts():
+    current = snapshot(period="20250630")
+    fundamentals = FakeFundamentals(
+        {
+            ("000001.SZ", "20250630"): current,
+            ("000001.SZ", "20250331"): snapshot(period="20250331"),
+            ("000001.SZ", "20240630"): snapshot(period="20240630"),
+        }
+    )
+    fundamentals.company_profile = CompanyProfile(
+        identity=CompanyIdentity(ts_code="000001.SZ", name="示例公司", provider="tushare.stock_basic"),
+        provider_industry="新行业",
+    )
+    service = AnalyzerService(
+        fundamentals=fundamentals,
+        store=FakeStore(),
+        industry_profiles={"银行": "bank_v1"},
+    )
+
+    result = service.analyze_company("000001.SZ", "20250630")
+
+    assert result.status == CompanyAnalysisStatus.OK
+    assert result.card.classification.mapping_status.value == "UNMAPPED"
+    assert result.card.classification.rule_profile_id == "generic"
+    assert result.card.facts
+    assert result.card.rule_results
 
 
 def test_bank_analyze_company_does_not_stop_on_generic_missing_fields():
