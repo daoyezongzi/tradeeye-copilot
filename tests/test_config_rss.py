@@ -25,7 +25,7 @@ rss:
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
     monkeypatch.delenv("FEISHU_WEBHOOK", raising=False)
 
-    settings = load_settings(config_path, env_path=env_path)
+    settings = load_settings(config_path, env_path=env_path, secrets_dir=tmp_path / "missing-secrets")
 
     assert settings.tushare.token == "token-from-dotenv"
     assert settings.notify.feishu_webhook == "https://open.feishu.cn/test"
