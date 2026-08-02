@@ -95,7 +95,21 @@ class RealReportService:
             )
 
     def get_company_card(self, ts_code, period):
-        return self.cache.get_company(ts_code, period)
+        card = self.cache.get_company(ts_code, period)
+        if card is not None:
+            return card
+        store = getattr(self, "store", None)
+        if store is None:
+            return None
+        card = store.get_company_card(ts_code, period)
+        if card is not None:
+            self.cache.put_company(card)
+        return card
+
+    def _persist_company_card(self, card):
+        store = getattr(self, "store", None)
+        if store is not None:
+            store.upsert_company_card(card)
 
     def get_daily_summary(self, date):
         return self.cache.get_daily(date)
@@ -130,6 +144,7 @@ class RealReportService:
             raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
         result = self.analyzer.analyze_company(ts_code, period)
         if result.card is not None:
+            self._persist_company_card(result.card)
             self.cache.put_company(result.card)
         return result
 
@@ -177,6 +192,7 @@ class RealReportService:
 
     def _cache_bundle(self, bundle):
         for card in bundle.summary.cards:
+            self._persist_company_card(card)
             self.cache.put_company(card)
         self.cache.put_daily(bundle.summary)
 

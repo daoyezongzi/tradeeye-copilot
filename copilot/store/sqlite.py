@@ -2,6 +2,7 @@ from pathlib import Path
 import sqlite3
 
 from copilot.models import Finding, PeriodSnapshot
+from copilot.report.builder import CompanyCard
 
 
 class SQLiteStore:
@@ -39,6 +40,38 @@ class SQLiteStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS company_cards (
+                    ts_code TEXT NOT NULL,
+                    period TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    PRIMARY KEY (ts_code, period)
+                )
+                """
+            )
+
+    def upsert_company_card(self, card: CompanyCard) -> None:
+        payload = card.model_dump_json()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO company_cards (ts_code, period, payload)
+                VALUES (?, ?, ?)
+                ON CONFLICT(ts_code, period) DO UPDATE SET payload = excluded.payload
+                """,
+                (card.ts_code, card.period, payload),
+            )
+
+    def get_company_card(self, ts_code: str, period: str) -> CompanyCard | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT payload FROM company_cards WHERE ts_code = ? AND period = ?",
+                (ts_code, period),
+            ).fetchone()
+        if row is None:
+            return None
+        return CompanyCard.model_validate_json(row["payload"])
 
     def upsert_snapshot(self, snapshot: PeriodSnapshot) -> None:
         payload = snapshot.model_dump_json()
