@@ -6,6 +6,10 @@ import yaml
 from pydantic import BaseModel, Field
 
 
+SECRET_ENV_FILES = (".tushare", ".feishu", ".deepseek", "tradeeye-copilot.env")
+DEFAULT_SECRETS_DIR = Path.home() / "Documents" / ".secrets"
+
+
 class DatabaseSettings(BaseModel):
     path: Path
 
@@ -79,7 +83,19 @@ class Settings(BaseModel):
     rules: RuleSettings = Field(default_factory=RuleSettings)
 
 
-def load_settings(path: str | Path = "config.yaml", env_path: str | Path = ".env") -> Settings:
+def _load_secret_files(secrets_dir: str | Path | None) -> None:
+    configured = os.getenv("TRADEEYE_SECRETS_DIR")
+    base_dir = Path(secrets_dir or configured or DEFAULT_SECRETS_DIR)
+    for name in SECRET_ENV_FILES:
+        load_dotenv(base_dir / name, override=False)
+
+
+def load_settings(
+    path: str | Path = "config.yaml",
+    env_path: str | Path = ".env",
+    secrets_dir: str | Path | None = None,
+) -> Settings:
+    _load_secret_files(secrets_dir)
     load_dotenv(env_path, override=False)
     config_path = Path(path)
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}

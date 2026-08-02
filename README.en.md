@@ -168,18 +168,49 @@ pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-Fill in secrets (see [Configuration reference](#configuration-reference)):
+Secrets can stay in the repository-local `.env` file (ignored by `.gitignore`), or be split into a physically isolated directory outside the repository:
 
-```bash
-TUSHARE_TOKEN=...
-LLM_API_KEY=...              # optional, OpenAI-compatible LLM API key
-LLM_BASE_URL=...             # optional, OpenAI-compatible endpoint such as DeepSeek / Ascend / another compatible provider
-LLM_MODEL=...                # optional, model name
-FEISHU_WEBHOOK=...           # optional
-AUTOMATION_TRIGGER_TOKEN=... # optional, required by cron endpoint
-FEISHU_VERIFICATION_TOKEN=...# optional, for card callback
-PUBLIC_BASE_URL=...          # optional, public URL of deployed app
+```text
+C:\Users\Soyo\Documents\.secrets\
+  .tushare              # TUSHARE_TOKEN
+  .feishu               # FEISHU_WEBHOOK / FEISHU_VERIFICATION_TOKEN
+  .deepseek             # LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
+  tradeeye-copilot.env  # automation / PUBLIC_BASE_URL project-specific values
 ```
+
+Load order:
+
+```text
+system environment variables
+→ .tushare / .feishu / .deepseek / tradeeye-copilot.env under TRADEEYE_SECRETS_DIR
+→ same files under C:\Users\Soyo\Documents\.secrets
+→ repository-local .env
+→ non-secret config.yaml
+```
+
+Example:
+
+```env
+# .env, or C:\Users\Soyo\Documents\.secrets\.tushare
+TUSHARE_TOKEN=...
+
+# .env, or C:\Users\Soyo\Documents\.secrets\.feishu
+FEISHU_WEBHOOK=...
+FEISHU_VERIFICATION_TOKEN=...
+
+# .env, or C:\Users\Soyo\Documents\.secrets\.deepseek
+LLM_API_KEY=...
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+
+# .env, or C:\Users\Soyo\Documents\.secrets\tradeeye-copilot.env
+AUTOMATION_TRIGGER_TOKEN=...
+PUBLIC_BASE_URL=...
+```
+
+For temporary testing, you can set variables only in the current shell; those values have the highest priority and disappear when the shell closes.
+
+`.env.example` only keeps the variable list and must not contain real values.
 
 Non-secret settings live in `config.yaml`: coverage pool (100 companies), company names, industry routing, rule thresholds, LLM defaults, PDF cache, and evaluation window.
 

@@ -168,20 +168,49 @@ pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-填入密钥（详见 [配置参考](#配置参考)）：
+密钥可以继续写在仓库内 `.env`（已被 `.gitignore` 忽略），也可以拆到仓库外的物理隔离目录：
 
-```bash
-TUSHARE_TOKEN=...
-LLM_API_KEY=...              # 可选，OpenAI 兼容 LLM API Key
-LLM_BASE_URL=...             # 可选，OpenAI 兼容端点（如 DeepSeek / Ascend / 其他兼容服务）
-LLM_MODEL=...                # 可选，模型名
-FEISHU_WEBHOOK=...            # 可选
-AUTOMATION_TRIGGER_TOKEN=...  # 可选，cron 接口需要
-FEISHU_VERIFICATION_TOKEN=... # 可选，卡片 callback 需要
-PUBLIC_BASE_URL=...           # 可选，部署实例的公网地址
+```text
+C:\Users\Soyo\Documents\.secrets\
+  .tushare              # TUSHARE_TOKEN
+  .feishu               # FEISHU_WEBHOOK / FEISHU_VERIFICATION_TOKEN
+  .deepseek             # LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
+  tradeeye-copilot.env  # automation / PUBLIC_BASE_URL 等项目专属项
 ```
 
-非密钥配置在 `config.yaml`：覆盖池（100 家）、公司名、行业路由、规则阈值、LLM 端点、PDF 缓存、评估窗口。
+加载优先级：
+
+```text
+系统环境变量
+→ TRADEEYE_SECRETS_DIR 指定目录下的 .tushare / .feishu / .deepseek / tradeeye-copilot.env
+→ C:\Users\Soyo\Documents\.secrets 下的同名文件
+→ 仓库内 .env
+→ config.yaml 非密钥配置
+```
+
+示例：
+
+```env
+# .env，或 C:\Users\Soyo\Documents\.secrets\.tushare
+TUSHARE_TOKEN=...
+
+# .env，或 C:\Users\Soyo\Documents\.secrets\.feishu
+FEISHU_WEBHOOK=...
+FEISHU_VERIFICATION_TOKEN=...
+
+# .env，或 C:\Users\Soyo\Documents\.secrets\.deepseek
+LLM_API_KEY=...
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+
+# .env，或 C:\Users\Soyo\Documents\.secrets\tradeeye-copilot.env
+AUTOMATION_TRIGGER_TOKEN=...
+PUBLIC_BASE_URL=...
+```
+
+临时测试时也可以只在当前 shell 设置环境变量；它优先级最高，关闭窗口后消失。
+
+`.env.example` 只保留变量清单，不填写真实值。
 
 ### 运行
 
