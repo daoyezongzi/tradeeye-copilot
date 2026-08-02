@@ -1172,7 +1172,6 @@ async function loadQuarterly() {
       { label: "覆盖池", value: review.coverage_count },
       { label: "已披露", value: review.disclosed_count },
       { label: "命中", value: review.finding_count },
-      { label: "精确率", value: review.precision_pct === null ? "待复核" : `${review.precision_pct}%` },
       ...review.top_rules.map((item) => ({ label: item.rule_id, value: item.count })),
     ];
     quarterlyReview.replaceChildren(

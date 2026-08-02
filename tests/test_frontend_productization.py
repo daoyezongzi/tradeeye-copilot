@@ -196,7 +196,8 @@ def test_researcher_frontend_does_not_expose_review_ui_or_calls(html, js):
         "reviewLabels",
         '"/api/reviews/labels"',
         '"/api/reviews/metrics"',
-        '"/api/reviews/labels.csv"',
+        "precision_pct",
+        "精确率",
     ]:
         assert marker not in html
         assert marker not in js
