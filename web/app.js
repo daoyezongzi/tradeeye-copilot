@@ -51,13 +51,15 @@ const SEVERITY_META = {
 };
 
 const state = {
-  meta: { coverage_count: 0, company_names: {}, tushare_ready: false, feishu_ready: false },
+  meta: { coverage_count: 0, company_names: {}, tushare_ready: false, feishu_ready: false, agent_ready: false },
   bundle: null,
   filter: "all",
   previewDate: null,
   activeJobId: null,
   jobPollTimer: null,
   reviewLabels: {},
+  agent: null,
+  agentPanel: null,
 };
 
 /* ---------- 日期与报告期 ---------- */
@@ -75,6 +77,14 @@ function toInputDate(value) {
 
 function selectedDate() {
   return toApiDate(el("disclosure-date").value);
+}
+
+async function waitForAgentModules() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (window.TradeEyeAgentPanel?.createAgentPanel && window.TradeEyeAgentChat?.createAgentChat) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Agent 前端模块未加载");
 }
 
 /* 报告期只有四个法定季末，倒序列出已过去的季末，未到的季末不可能有财报 */
@@ -145,6 +155,16 @@ const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ts_code: tsCode, period }),
+    });
+  },
+
+  async agentChat(tsCode, period, question, sessionId = null) {
+    const payload = { ts_code: tsCode, period, question };
+    if (sessionId) payload.session_id = sessionId;
+    return requestJson("/api/agent/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
   },
 
@@ -643,6 +663,7 @@ function renderCard(card, options = {}) {
     push.append(chevron);
     head.addEventListener("click", () => node.classList.toggle("open"));
   }
+  node.addEventListener("click", () => state.agent?.bindCard({ ts_code: card.ts_code, period: card.period, severity: key }));
   head.append(name, code, summary, push);
 
   const body = document.createElement("div");
@@ -1306,6 +1327,7 @@ async function loadCompany(tsCode, period) {
     companyPermalinkHint.textContent = `固定链接 #/company/${tsCode}/${period}`;
     if (result.card) {
       companyDetail.replaceChildren(renderCard(result.card, { standalone: true }));
+      state.agent?.bindCard({ ts_code: result.card.ts_code, period: result.card.period, severity: severityKey(result.card) });
     } else {
       companyDetail.replaceChildren(makeEmpty(`${result.status}：${result.message}`));
     }
@@ -1354,6 +1376,38 @@ async function showEvidence(card, finding) {
     evidenceDialog.showModal();
   } catch (error) {
     notify(error.message, true);
+  }
+}
+
+async function showAgentReference(reference) {
+  evidenceContent.textContent = JSON.stringify(reference, null, 2);
+  evidenceDialog.showModal();
+}
+
+function initAgentPanel() {
+  const panel = window.TradeEyeAgentPanel.createAgentPanel({
+    mount: document.body,
+    onReference: showAgentReference,
+  });
+  const chat = window.TradeEyeAgentChat.createAgentChat({
+    panel,
+    api,
+    executors: {
+      refetchCompany: async (tsCode, period) => {
+        navigate(`#/company/${tsCode}/${period}`);
+        await loadCompany(tsCode, period);
+      },
+      rescanDisclosureDay: async (date) => {
+        el("disclosure-date").value = toInputDate(date);
+        navigate("#/workbench");
+        await loadDisclosureDay(date);
+      },
+    },
+  });
+  state.agentPanel = panel;
+  state.agent = chat;
+  if (!state.meta.agent_ready) {
+    panel.setDisabled(true, "Agent 未配置 LLM");
   }
 }
 
@@ -1482,6 +1536,8 @@ async function boot() {
   el("automation-date").value = el("disclosure-date").value;
   initPeriodSelect("20250630");
   await loadMeta();
+  await waitForAgentModules();
+  initAgentPanel();
   renderCards();
   renderReview();
   loadReviewLabels().catch((error) => {
