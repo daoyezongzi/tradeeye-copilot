@@ -45,7 +45,7 @@ The system covers a configurable watchlist (default: **100 A-share companies**),
 - **Company research card**: facts → anomalies → attribution → market context
 - **Evidence traceability**: every finding carries `Evidence(source, field, period, value)` and can drill down to source values
 - **Quarterly recap**: coverage pool, disclosed count, hit count, and rule distribution
-- **Feishu push**: formal disclosure summary text to group chats
+- **Feishu push**: formal disclosure summary text to group chats; GitHub Actions can send serverless reminders from the Tushare disclosure calendar
 
 ## Why this design
 
@@ -68,10 +68,11 @@ The system covers a configurable watchlist (default: **100 A-share companies**),
 ## Features
 
 ### Disclosure scanning
-- Triggered by the **Tushare disclosure calendar**; optional RSS feed acts as a trigger hint (`copilot/rss/announcements.py` filters earnings titles and marks `DATA_PENDING` when Tushare data is not ready)
+- Triggered by the **Tushare disclosure calendar**; RSS is only an optional fallback reminder source and never auto-fetches Tushare data or creates cards
 - Pulls three periods (current / previous quarter / year-ago) across four tables (income statement / balance sheet / cash flow / financial indicators)
-- **SQLite persistence**: snapshots, jobs, review labels, notification logs
+- **SQLite persistence**: snapshots, jobs, review labels, notification logs, editable stock pool
 - **Resumable job store**: `POST /api/disclosure-day/jobs`, `resume_from_job_id`, `X-TradeEye-Owner` isolation, frontend 1-second polling
+- **Pause / resume / stop**: scan controls support start, pause, resume, and stop; unavailable or incomplete data produces `BLOCKED` cards instead of silently missing cards
 
 ### Rule engine (deterministic arithmetic)
 Six arithmetic rules with thresholds from `config.yaml` (`rules.thresholds`):
@@ -91,6 +92,7 @@ Plus a **management tone weakened** finding (`management_tone_weakened`, YELLOW)
 - **Daily briefing** — header, lead-in, severity distribution bar (red / yellow / OK / data issues)
 - **Company research cards** — name-first display, code and report period as auxiliary identifiers; expandable with the highest-severity card expanded by default
 - **Single-company analysis** — enter a stock code or company name and report period to generate one company card
+- **Stock pool** — primary navigation page for editing the coverage pool; changes affect subsequent disclosure scans and reminder matching
 - **Agent floating layer** — bottom-right robot entry, docked right by default, draggable/snap-back; answers questions about the current card and suggests refetch/rescan actions only after confirmation
 - **Evidence drill-down popup** — per finding, showing the original `Evidence` payload
 - **Quarterly recap** — coverage pool, disclosed count, hit count, and rule distribution; human-review metrics stay in backend evaluation APIs, not in the analyst main path
@@ -100,8 +102,9 @@ Plus a **management tone weakened** finding (`management_tone_weakened`, YELLOW)
 ### Feishu notifications
 - Formal disclosure summary text (overview + all red/yellow anomalies + data issues; “no anomaly” companies counted only)
 - **Long-text segmentation** (`split_feishu_text`, 3500 chars/segment with `[i/n]` headers)
-- Idempotent de-duplication per date, send logs, preview, and manual resend APIs
+- Idempotent de-duplication per date, send logs, preview, and manual resend APIs; the formal UI currently hides the manual preview/send button
 - Interactive card **callback** endpoint with challenge / verification token checks, no public inbound webhook required
+- GitHub Actions can send “earnings disclosed today” reminders from Tushare `disclosure_date`; without `TUSHARE_TOKEN`, it can fall back to `RSS_FEEDS`
 
 ### Automation
 - `POST /api/automation/disclosure-day/cron`, protected by `X-Automation-Token` (`AUTOMATION_TRIGGER_TOKEN`)
@@ -239,7 +242,11 @@ After deployment, GitHub Actions cron (or any scheduler) can call the [automatio
 | `GET` | `/api/reviews/metrics` | Internal evaluation: precision breakdowns |
 | `POST` / `GET` | `/api/reviews/labels` | Internal evaluation: upsert / list review labels |
 | `DELETE` | `/api/reviews/labels/{ts_code}/{period}/{rule_id}` | Internal evaluation: delete a label |
-| `POST` | `/api/rss/poll` | Poll RSS feeds (trigger hint) |
+| `GET` | `/api/stock-pool` | List the editable stock pool |
+| `POST` | `/api/stock-pool` | Add or update a stock-pool company |
+| `DELETE` | `/api/stock-pool/{ts_code}` | Remove a stock-pool company |
+| `POST` | `/api/rss/poll` | Poll RSS feeds (fallback trigger hint) |
+| `POST` | `/api/rss/poll/notify` | Poll RSS and send a reminder (local developer panel) |
 | `GET` | `/api/notify/logs?limit=20` | Notification send logs |
 | `POST` | `/api/notify/feishu/callback` | Feishu interactive card callback |
 | `POST` | `/api/notify/feishu/disclosure-day/{date}/preview` | Preview summary text |
@@ -275,8 +282,8 @@ Interactive FastAPI docs are available at `http://127.0.0.1:8000/docs` when runn
 | `llm` | Default `base_url`, `model`, and `timeout_seconds` for OpenAI-compatible endpoints |
 | `narrative` | PDF cache directory and max section characters |
 | `notify` | `feishu_enabled` flag |
-| `eval` | `coverage_pool` (100 codes), `company_names`, `company_industries`, benchmark window and output path |
-| `rss` | Feed list and `max_entries` |
+| `eval` | `coverage_pool` (100 codes), `company_names`, `company_industries`, benchmark window and output path; the reminder Action reads this coverage pool |
+| `rss` | Fallback RSS feed list and `max_entries`; with `TUSHARE_TOKEN`, Actions default to Tushare instead of RSS |
 | `rules.thresholds` | Six arithmetic rule thresholds |
 
 ## Rule engine
@@ -297,6 +304,10 @@ Rules are **pure arithmetic functions** in `copilot/rules/` (`divergence.py`, `c
   - `workflow_dispatch` supports `date` and `notify` inputs
   - Requires Secrets `TRADEEYE_API_BASE_URL` and `AUTOMATION_TRIGGER_TOKEN`
 - The workflow posts to `/api/automation/disclosure-day/cron` with `X-Automation-Token`; `copilot/scheduler.py` dispatches disclosure-day automation and optional Feishu notification.
+- Serverless reminder workflow: `.github/workflows/rss-feishu-reminder.yml`
+  - `workflow_dispatch` accepts `date=YYYYMMDD`; the `20250825` Action flow has been verified successfully
+  - Prefer Secret `TUSHARE_TOKEN` and Tushare `disclosure_date`, filtered by the `config.yaml` coverage pool
+  - Requires Secret `FEISHU_WEBHOOK` for delivery; optional `RSS_FEEDS` acts as fallback when no Tushare token is available
 
 ## LLM usage (external LLM API)
 
@@ -332,10 +343,11 @@ The Agent is integrated into the analyst frontend as a floating Q&A layer rather
 ├── copilot/          # Backend package (API, services, rules, store, notify)
 ├── web/              # Vanilla JS frontend workbench (index.html, app.js, components.js, styles.css)
 ├── eval/             # Benchmark / manual review tools
-├── tests/            # pytest + Node frontend tests (238 pytest, 18 Node tests)
+├── tests/            # pytest + Node frontend tests
 ├── config.yaml       # Non-secret configuration
 ├── start_real.bat    # One-click local startup (production app)
 ├── .github/workflows/disclosure-automation.yml
+├── .github/workflows/rss-feishu-reminder.yml
 └── docs/             # Development log, specs, and plans
 ```
 
@@ -347,7 +359,7 @@ npm test
 node --check web/app.js && node --check web/agent-chat.js && node --check web/agent-panel.js
 ```
 
-Current main-branch validation scale: 238 pytest and 18 Node frontend tests. The suite covers API routes, rule arithmetic, disclosure scan bundles, job store persistence/resume, Feishu rendering and segmentation, review storage and internal evaluation metrics, configuration validation, coverage-pool validation, frontend productization contracts, and Agent panel/chat pure logic.
+Current main-branch validation scale: 250 pytest and 18 Node frontend tests. The suite covers API routes, rule arithmetic, disclosure scan bundles, job store persistence/resume/pause, Feishu rendering and segmentation, Tushare Action disclosure reminders, RSS fallback, editable stock pool, review storage and internal evaluation metrics, configuration validation, coverage-pool validation, frontend productization contracts, and Agent panel/chat pure logic.
 
 ## Compliance boundary
 

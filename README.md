@@ -45,7 +45,7 @@ TradeEye Copilot 是专为买方机构打造的轻量级协同投研助手。披
 - **公司研判卡**：事实 → 异常 → 归因 → 市场四层结构
 - **依据溯源**：每条 finding 携带 `Evidence(source, field, period, value)`，可下钻到原始数值
 - **季度复盘**：覆盖池、披露数、命中数与规则分布
-- **飞书推送**：正式披露摘要文本推送至群聊
+- **飞书推送**：正式披露摘要文本推送至群聊；GitHub Actions 可用 Tushare 披露日历做无服务器提醒
 
 ## 为什么这样设计
 
@@ -68,10 +68,11 @@ TradeEye Copilot 是专为买方机构打造的轻量级协同投研助手。披
 ## 功能特性
 
 ### 披露扫描
-- 由 **Tushare 披露日历**触发；RSS 可选作为触发提示（`copilot/rss/announcements.py` 过滤财报标题，Tushare 未就绪时标记 `DATA_PENDING`）
+- 由 **Tushare 披露日历**触发；RSS 仅作为可选 fallback 提醒源，标题正则过滤后只发提醒，不自动抓取或出卡
 - 每家公司拉取三期（本期 / 上季 / 去年同期）四张表（利润表 / 资产负债表 / 现金流量表 / 财务指标）
-- **SQLite 持久化**：快照、job、复核标签、通知日志
+- **SQLite 持久化**：快照、job、复核标签、通知日志、自定义股票池
 - **可续扫 job store**：`POST /api/disclosure-day/jobs`、`resume_from_job_id`、`X-TradeEye-Owner` 隔离、前端 1 秒轮询
+- **暂停/继续/停止**：扫描控件支持开始、暂停、继续、停止；数据未就绪或字段不完整时生成 `BLOCKED` 卡而不是静默无卡
 
 ### 规则引擎（确定性算术）
 六条算术规则，阈值来自 `config.yaml`（`rules.thresholds`）：
@@ -90,7 +91,8 @@ TradeEye Copilot 是专为买方机构打造的轻量级协同投研助手。披
 ### 研究工作台（Web）
 - **当日汇总**——报头、导语、严重度分布条（红 / 黄 / OK / 数据问题）
 - **公司研判卡**——名称优先展示，代码与报告期作为辅助标识；可展开，默认展开最高分卡片
-- **单票研判**——输入股票代码与报告期，直接生成单家公司研判卡
+- **单票研判**——输入股票代码或公司名称与报告期，直接生成单家公司研判卡
+- **股票池**——一级导航维护可编辑覆盖池；修改后影响后续披露日扫描与提醒匹配
 - **Agent 浮层**——右下角小机器人入口，默认右侧停靠、可拖离/吸附；围绕当前卡片答疑，并可建议单票重抓或披露日重扫，执行前必须确认
 - **依据溯源弹窗**——逐条 finding 展示原始 `Evidence` 数据
 - **季度复盘**——覆盖池、披露数、命中数与规则分布；复核指标保留在后端评估能力中，不进入研究员前端主路径
@@ -100,8 +102,9 @@ TradeEye Copilot 是专为买方机构打造的轻量级协同投研助手。披
 ### 飞书推送
 - 正式披露摘要文本（总览 + 全部红/黄异常 + 数据问题；未见异常仅计数）
 - **长文本分段**（`split_feishu_text`，3500 字符/段，带 `[i/n]` 头）
-- 按日期**幂等去重**、**发送日志**、**预览**与**手动重发**接口
+- 按日期**幂等去重**、**发送日志**、**预览**与**手动重发**接口；正式 UI 暂时隐藏手动预览/发送按钮
 - 交互卡片 **callback** 端点（challenge / verification token 校验），无需公网入站 webhook
+- GitHub Actions 可用 Tushare `disclosure_date` 在无服务器环境里发“今日有财报”提醒；无 `TUSHARE_TOKEN` 时可 fallback 到 `RSS_FEEDS`
 
 ### 自动化
 - `POST /api/automation/disclosure-day/cron`，由 `X-Automation-Token`（`AUTOMATION_TRIGGER_TOKEN`）保护
@@ -239,7 +242,11 @@ pytest -q
 | `GET` | `/api/reviews/metrics` | 内部评估：precision 分解 |
 | `POST` / `GET` | `/api/reviews/labels` | 内部评估：写入 / 列出复核标签 |
 | `DELETE` | `/api/reviews/labels/{ts_code}/{period}/{rule_id}` | 内部评估：删除标签 |
-| `POST` | `/api/rss/poll` | 轮询 RSS（触发提示） |
+| `GET` | `/api/stock-pool` | 列出当前可编辑股票池 |
+| `POST` | `/api/stock-pool` | 新增或更新股票池公司 |
+| `DELETE` | `/api/stock-pool/{ts_code}` | 删除股票池公司 |
+| `POST` | `/api/rss/poll` | 轮询 RSS（备用触发提示） |
+| `POST` | `/api/rss/poll/notify` | 轮询 RSS 并发送提醒（本地开发者区使用） |
 | `GET` | `/api/notify/logs?limit=20` | 通知发送日志 |
 | `POST` | `/api/notify/feishu/callback` | 飞书交互卡片回调 |
 | `POST` | `/api/notify/feishu/disclosure-day/{date}/preview` | 预览摘要文本 |
@@ -275,8 +282,8 @@ pytest -q
 | `llm` | OpenAI 兼容端点的 `base_url`、`model`、`timeout_seconds` |
 | `narrative` | PDF 缓存目录、章节最大字符数 |
 | `notify` | `feishu_enabled` 开关 |
-| `eval` | `coverage_pool`（100 个代码）、`company_names`、`company_industries`、基准窗口与输出路径 |
-| `rss` | 订阅源列表、`max_entries` |
+| `eval` | `coverage_pool`（100 个代码）、`company_names`、`company_industries`、基准窗口与输出路径；GitHub Action 披露提醒读取这里的覆盖池 |
+| `rss` | 备用 RSS 订阅源列表、`max_entries`；有 `TUSHARE_TOKEN` 时 Actions 默认走 Tushare 而不是 RSS |
 | `rules.thresholds` | 六条算术规则的阈值 |
 
 ## 规则引擎
@@ -297,6 +304,10 @@ pytest -q
   - `workflow_dispatch` 支持 `date` 与 `notify` 输入
   - 需要 Secrets `TRADEEYE_API_BASE_URL` 与 `AUTOMATION_TRIGGER_TOKEN`
 - 工作流向 `/api/automation/disclosure-day/cron` 发送 `X-Automation-Token`；`copilot/scheduler.py` 分发披露日自动化（可选飞书推送）
+- 无服务器提醒：`.github/workflows/rss-feishu-reminder.yml`
+  - `workflow_dispatch` 可传 `date=YYYYMMDD`；当前已验证 `20250825` Action 流程成功
+  - 优先使用 Secret `TUSHARE_TOKEN` 调 Tushare `disclosure_date` 并按 `config.yaml` 覆盖池过滤
+  - 需要 Secret `FEISHU_WEBHOOK` 发送飞书；可选 `RSS_FEEDS` 作为无 Tushare token 时的 RSS fallback
 
 ## LLM 使用（外部 LLM API）
 
@@ -332,10 +343,11 @@ Agent 已接入研究员前端，作为悬浮问答层而不是一级导航页�
 ├── copilot/          # 后端包（API、服务、规则、存储、通知）
 ├── web/              # 原生 JS 前端工作台（index.html、app.js、components.js、styles.css）
 ├── eval/             # 基准 / 人工复核工具
-├── tests/            # pytest + Node 前端测试套件（236 个 pytest，15 个 Node 测试）
+├── tests/            # pytest + Node 前端测试套件
 ├── config.yaml       # 非密钥配置
 ├── start_real.bat    # 一键本地启动（正式应用）
 ├── .github/workflows/disclosure-automation.yml
+├── .github/workflows/rss-feishu-reminder.yml
 └── docs/             # 开发日志、spec 与 plan
 ```
 
@@ -347,7 +359,7 @@ npm test
 node --check web/app.js && node --check web/agent-chat.js && node --check web/agent-panel.js
 ```
 
-当前主分支验证规模：238 个 pytest、18 个 Node 前端测试。套件覆盖 API 路由、规则算术、披露扫描 bundle、job store 持久化/续扫、飞书渲染与分段、复核存储与内部评估指标、配置校验、覆盖池校验、前端产品化契约、Agent panel/chat 纯逻辑。
+当前主分支验证规模：250 个 pytest、18 个 Node 前端测试。套件覆盖 API 路由、规则算术、披露扫描 bundle、job store 持久化/续扫/暂停、飞书渲染与分段、Tushare Action 披露提醒、RSS fallback、可编辑股票池、复核存储与内部评估指标、配置校验、覆盖池校验、前端产品化契约、Agent panel/chat 纯逻辑。
 
 ## 合规边界
 
