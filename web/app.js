@@ -19,12 +19,9 @@ const diagnosticStatus = el("diagnostic-status");
 const jobHistory = el("job-history");
 const automationStatus = el("automation-status");
 const notifyLogTable = el("notify-log-table");
-const reviewSyncStatus = el("review-sync-status");
 const quarterlyReview = el("quarterly-review");
 const operationStatus = el("operation-status");
 const metaStatus = el("meta-status");
-const reviewMetrics = el("review-metrics");
-const reviewTable = el("review-table");
 
 const evidenceDialog = el("evidence-dialog");
 const evidenceContent = el("evidence-content");
@@ -39,8 +36,6 @@ const snackbar = el("snackbar");
 const snackbarText = el("snackbar-text");
 
 /* ---------- 状态 ---------- */
-
-const REVIEW_EXPORT_COLUMNS = ["ts_code", "period", "rule_id", "label", "notes", "severity", "industry"];
 
 /* 严重度做双重编码：颜色 + 文字标签，色盲或黑白打印下仍可分辨 */
 const SEVERITY_META = {
@@ -57,7 +52,6 @@ const state = {
   previewDate: null,
   activeJobId: null,
   jobPollTimer: null,
-  reviewLabels: {},
   agent: null,
   agentPanel: null,
 };
@@ -225,25 +219,6 @@ const api = {
     return requestJson("/api/quarterly");
   },
 
-  async listReviewLabels() {
-    return requestJson("/api/reviews/labels");
-  },
-
-  async saveReviewLabel(label) {
-    return requestJson("/api/reviews/labels", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(label),
-    });
-  },
-
-  async deleteReviewLabel(tsCode, period, ruleId) {
-    return requestJson(`/api/reviews/labels/${tsCode}/${period}/${ruleId}`, { method: "DELETE" });
-  },
-
-  async getReviewMetrics() {
-    return requestJson("/api/reviews/metrics");
-  },
 };
 
 function setStatus(payload) {
@@ -367,11 +342,10 @@ function makeChapterHead(title, count, note) {
 
 /* ---------- 视图路由：hash 稳定 URL ---------- */
 
-const VIEWS = ["workbench", "company", "review"];
+const VIEWS = ["workbench", "company"];
 const VIEW_TITLES = {
   workbench: "披露日研判",
   company: "单票研判",
-  review: "复核队列",
 };
 
 function activateView(view) {
@@ -399,6 +373,11 @@ function parseHash() {
 async function applyRoute() {
   const route = parseHash();
   activateView(route.view);
+
+  if (!route.date && !route.tsCode && window.location.hash !== `#/${route.view}`) {
+    navigate("#/workbench");
+    return;
+  }
 
   if (route.expandDiagnostics) {
     el("adv-diagnostics").open = true;
@@ -569,36 +548,6 @@ function renderFinding(card, finding) {
   return item;
 }
 
-function renderReviewActions(card) {
-  const wrap = document.createElement("div");
-  wrap.className = "review-actions";
-  const ruleId = card.findings[0]?.rule_id || "";
-  const current = state.reviewLabels[reviewKey(card.ts_code, card.period, ruleId)];
-
-  for (const label of ["TRUE", "FALSE", "UNREVIEWED"]) {
-    const chip = makeChip(reviewLabelText(label));
-    chip.setAttribute("role", "button");
-    chip.setAttribute("tabindex", "0");
-    chip.setAttribute("aria-pressed", String((current?.label || "UNREVIEWED") === label));
-    const activate = () => {
-      setReviewLabel(card, label).then(() => {
-        renderCards();
-        renderReview();
-        loadReviewMetrics();
-      });
-    };
-    chip.addEventListener("click", activate);
-    chip.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        activate();
-      }
-    });
-    wrap.append(chip);
-  }
-  return wrap;
-}
-
 /* fact_line 形如「营收 12.3 亿 | 净利 1.2 亿」，拆成等宽分格，第一段是标签、其余是取值 */
 function renderFactLine(factLine) {
   const wrap = document.createElement("div");
@@ -693,7 +642,7 @@ function renderCard(card, options = {}) {
   const permalink = document.createElement("a");
   permalink.href = `#/company/${card.ts_code}/${card.period}`;
   permalink.textContent = "打开公司详情";
-  foot.append(permalink, renderReviewActions(card));
+  foot.append(permalink);
   body.append(foot);
 
   node.append(head, body);
@@ -870,7 +819,6 @@ async function runAutomation() {
     const result = await api.runDisclosureAutomation(date, true);
     renderAutomationStatus(result);
     await loadNotifyLogs();
-    await loadReviewLabels();
     notify(`${date} 自动化运行完成`);
   } catch (error) {
     automationStatus.replaceChildren(makeEmpty(error.message));
@@ -911,143 +859,6 @@ async function loadNotifyLogs() {
     setStatus({ error: error.message });
     return [];
   }
-}
-
-function renderReviewSyncStatus(labels = Object.values(state.reviewLabels)) {
-  const reviewed = labels.length;
-  const reviewers = new Set(labels.map((label) => label.reviewer).filter(Boolean));
-  reviewSyncStatus.className = "metric-grid";
-  const items = [
-    { label: "后端标签", value: reviewed },
-    { label: "回写人", value: reviewers.size || "待回写" },
-  ];
-  reviewSyncStatus.replaceChildren(
-    ...items.map((item) => {
-      const node = document.createElement("div");
-      node.className = "metric";
-      const label = document.createElement("span");
-      label.textContent = item.label;
-      const value = document.createElement("strong");
-      value.textContent = String(item.value);
-      node.append(label, value);
-      return node;
-    })
-  );
-}
-
-function reviewKey(tsCode, period, ruleId) {
-  return `${tsCode}|${period}|${ruleId}`;
-}
-
-function reviewLabelText(label) {
-  if (label === "TRUE") return "✓ 有效";
-  if (label === "FALSE") return "✗ 误报";
-  return "待复核";
-}
-
-function loadReviewLabels() {
-  return api.listReviewLabels().then((labels) => {
-    state.reviewLabels = Object.fromEntries(labels.map((entry) => [reviewKey(entry.ts_code, entry.period, entry.rule_id), entry]));
-    renderCards();
-    renderReview();
-    renderReviewSyncStatus(labels);
-    return labels;
-  });
-}
-
-async function saveReviewLabel(card, label) {
-  const scanEvent = state.bundle?.scan.events.find((event) => event.ts_code === card.ts_code && event.period === card.period);
-  const saved = await api.saveReviewLabel({
-    ts_code: card.ts_code,
-    period: card.period,
-    rule_id: card.findings[0]?.rule_id || "",
-    label,
-    notes: "",
-    severity: card.max_severity || "",
-    industry: scanEvent?.industry || "unknown",
-  });
-  state.reviewLabels[reviewKey(saved.ts_code, saved.period, saved.rule_id)] = saved;
-  return saved;
-}
-
-async function clearReviewLabel(card) {
-  const ruleId = card.findings[0]?.rule_id || "";
-  const current = state.reviewLabels[reviewKey(card.ts_code, card.period, ruleId)];
-  const targetRuleId = current?.rule_id || ruleId;
-  if (targetRuleId) {
-    await api.deleteReviewLabel(card.ts_code, card.period, targetRuleId);
-  }
-  delete state.reviewLabels[reviewKey(card.ts_code, card.period, targetRuleId)];
-}
-
-async function setReviewLabel(card, label) {
-  try {
-    if (label === "UNREVIEWED") {
-      await clearReviewLabel(card);
-    } else {
-      await saveReviewLabel(card, label);
-    }
-    notify(`${card.ts_code} 已标注为${reviewLabelText(label)}`);
-  } catch (error) {
-    setStatus({ error: error.message });
-    notify(error.message, true);
-  }
-}
-
-async function loadReviewMetrics() {
-  try {
-    const metrics = await api.getReviewMetrics();
-    renderReviewMetrics(metrics);
-  } catch (error) {
-    setStatus({ error: error.message });
-  }
-}
-
-function renderReviewMetrics(metrics) {
-  const overall = metrics?.overall || {};
-  const items = [
-    { label: "已复核", value: overall.reviewed_count || 0 },
-    { label: "✓ 有效", value: overall.true_positive_count || 0 },
-    { label: "✗ 误报", value: overall.false_positive_count || 0 },
-    { label: "精确率", value: overall.precision_pct == null ? "待复核" : `${overall.precision_pct.toFixed(1)}%` },
-  ];
-  reviewMetrics.replaceChildren(
-    ...items.map((item) => {
-      const node = document.createElement("div");
-      node.className = typeof item.value === "number" ? "metric" : "metric wide";
-      const label = document.createElement("span");
-      label.textContent = item.label;
-      const value = document.createElement("strong");
-      value.textContent = String(item.value);
-      node.append(label, value);
-      return node;
-    })
-  );
-}
-
-function renderReview() {
-  const entries = Object.values(state.reviewLabels);
-
-  if (entries.length === 0) {
-    reviewTable.replaceChildren(makeEmpty("尚无标注，在工作台公司卡上标注有效或误报"));
-    return;
-  }
-
-  const wrap = document.createElement("div");
-  wrap.className = "table-wrap";
-  const rows = entries
-    .map(
-      (entry) =>
-        `<tr><td class="mono">${escapeHtml(entry.ts_code)}</td><td>${escapeHtml(displayName(entry.ts_code))}</td><td class="mono">${escapeHtml(entry.period)}</td><td>${escapeHtml(entry.rule_id)}</td><td>${escapeHtml(entry.label)}</td></tr>`
-    )
-    .join("");
-  wrap.innerHTML = `
-    <table>
-      <thead><tr><th>代码</th><th>名称</th><th>报告期</th><th>rule_id</th><th>label</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
-  reviewTable.replaceChildren(wrap);
 }
 
 /* ---------- 导出 ---------- */
@@ -1104,11 +915,6 @@ function exportBundleCsv() {
   });
   const header = ["ts_code", "name", "period", "industry", "status", "max_severity", "finding_count", "top_rule_id", "top_title", "detail"];
   downloadFile(`tradeeye-${state.bundle.date}.csv`, toCsv(header, rows), "text/csv");
-}
-
-function exportReviewCsv() {
-  window.location.href = "/api/reviews/labels.csv";
-  notify("正在导出 review labels CSV");
 }
 
 /* ---------- 数据加载 ---------- */
@@ -1513,7 +1319,6 @@ createMenuButton({
     { id: "export-menu-csv", label: "导出 CSV", onSelect: exportBundleCsv },
   ],
 });
-el("export-review-csv").addEventListener("click", exportReviewCsv);
 
 for (const button of document.querySelectorAll("#severity-filters button")) {
   button.addEventListener("click", () => {
@@ -1539,12 +1344,6 @@ async function boot() {
   await waitForAgentModules();
   initAgentPanel();
   renderCards();
-  renderReview();
-  loadReviewLabels().catch((error) => {
-    setStatus({ error: error.message });
-    notify(error.message, true);
-  });
-  loadReviewMetrics();
   loadQuarterly();
   loadJobHistory();
   loadNotifyLogs();
