@@ -8,6 +8,7 @@ from copilot.rules.base import source_evidence
 class NonRecurringProfitShareRule:
     threshold_pct: float
     id: str = "non_recurring_profit_share"
+    required_fact_ids: tuple[str, ...] = ("net_profit", "deducted_net_profit")
 
     def applies(self, ctx: Context) -> bool:
         return ctx.current.net_profit not in (None, 0) and ctx.current.deducted_net_profit is not None

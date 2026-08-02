@@ -2,8 +2,9 @@ from collections.abc import Callable
 import time
 
 import pandas as pd
+from pydantic import BaseModel
 
-from copilot.models import PeriodSnapshot
+from copilot.models import CompanyIdentity, PeriodSnapshot
 
 
 def _first_value(frame: pd.DataFrame, column: str):
@@ -13,6 +14,35 @@ def _first_value(frame: pd.DataFrame, column: str):
     if pd.isna(value):
         return None
     return value.item() if hasattr(value, "item") else value
+
+
+class CompanyProfile(BaseModel):
+    identity: CompanyIdentity
+    provider_industry: str | None = None
+    source: str = "tushare.stock_basic"
+    field: str = "industry"
+
+    @property
+    def ts_code(self) -> str:
+        return self.identity.ts_code
+
+    @property
+    def name(self) -> str | None:
+        return self.identity.name
+
+
+def normalize_company_profile(ts_code: str, frame: pd.DataFrame) -> CompanyProfile:
+    name = None if frame.empty else _first_value(frame, "name")
+    industry = None if frame.empty else _first_value(frame, "industry")
+    return CompanyProfile(
+        identity=CompanyIdentity(
+            ts_code=ts_code,
+            name=name,
+            provider="tushare.stock_basic",
+            name_field="name" if name is not None else None,
+        ),
+        provider_industry=industry,
+    )
 
 
 def normalize_financial_snapshot(
@@ -60,6 +90,10 @@ class TushareFundamentalsClient:
                 if attempt < self.max_retries - 1:
                     time.sleep(self.sleep_seconds * (2 ** attempt))
         raise RuntimeError(f"tushare call failed after {self.max_retries} attempts") from last_error
+
+    def fetch_company_profile(self, ts_code: str) -> CompanyProfile:
+        frame = self._call(self.pro_api.stock_basic, ts_code=ts_code, fields="ts_code,name,industry")
+        return normalize_company_profile(ts_code, frame)
 
     def fetch_snapshot(self, ts_code: str, period: str) -> PeriodSnapshot:
         params = {"ts_code": ts_code, "period": period}

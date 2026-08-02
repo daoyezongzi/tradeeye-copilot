@@ -6,8 +6,10 @@ from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from copilot.agent.contracts import AgentChatRequest, AgentChatResult
+from copilot.agent.exceptions import AgentCardNotFound, AgentLLMError, AgentSessionMismatch, AgentToolError
 from copilot.eval.manual_review import PrecisionBreakdown
-from copilot.models import Evidence
+from copilot.models import AgentFactContext, Evidence
 from copilot.report.builder import CompanyCard, DailySummary, QuarterlyReview
 from copilot.rss.service import RssPollResult
 from copilot.service.analyzer import CompanyAnalysisResult
@@ -81,6 +83,7 @@ class AppMeta(BaseModel):
     company_names: dict[str, str]
     tushare_ready: bool
     feishu_ready: bool
+    agent_ready: bool = False
 
 
 class FeishuPreview(BaseModel):
@@ -167,8 +170,28 @@ class ReportService(Protocol):
     def notify_feishu_disclosure_day(self, date: str) -> NotifyResult: ...
 
 
-def create_app(report_service: ReportService) -> FastAPI:
+def create_app(report_service: ReportService, agent_service=None) -> FastAPI:
     app = FastAPI(title="TradeEye Copilot")
+
+    @app.post("/api/agent/chat", response_model=AgentChatResult)
+    def agent_chat(request: AgentChatRequest):
+        if agent_service is None:
+            raise HTTPException(status_code=503, detail="Agent 服务未配置")
+        try:
+            return agent_service.answer_question(
+                request.ts_code,
+                request.period,
+                request.question,
+                session_id=request.session_id,
+            )
+        except AgentCardNotFound as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except AgentSessionMismatch as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except AgentToolError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except AgentLLMError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.get("/api/company/{ts_code}/{period}", response_model=CompanyCard)
     def company_card(ts_code: str, period: str):

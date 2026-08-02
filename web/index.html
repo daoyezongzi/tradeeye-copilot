@@ -23,7 +23,6 @@
         <nav class="nav" role="tablist" aria-label="工作台视图">
           <button role="tab" id="tab-workbench" data-view="workbench" aria-selected="true">披露日研判</button>
           <button role="tab" id="tab-company" data-view="company" aria-selected="false">单票研判</button>
-          <button role="tab" id="tab-review" data-view="review" aria-selected="false">复核队列</button>
         </nav>
       </div>
 
@@ -138,11 +137,6 @@
                 <div id="notify-log-table" class="empty">尚无通知日志</div>
               </div>
               <div class="fold__block">
-                <h3>复核回写状态</h3>
-                <p>读取后端复核标签，确认飞书 callback / 前端标注已落库</p>
-                <div id="review-sync-status" class="empty">尚未加载复核回写状态</div>
-              </div>
-              <div class="fold__block">
                 <h3>披露季复盘</h3>
                 <div class="metric-grid" id="quarterly-review"></div>
               </div>
@@ -198,26 +192,6 @@
           </div>
         </section>
 
-        <!-- ---------- 复核 ---------- -->
-        <section id="view-review" class="view" role="tabpanel" aria-labelledby="tab-review" hidden>
-          <div>
-            <div class="section-head">
-              <h2>复核状态</h2>
-              <p>标注结果保存在后端复核表，可导出为人工复核 CSV</p>
-            </div>
-            <div class="metric-grid" id="review-metrics"></div>
-            <div class="button-row" style="margin-top: var(--space-4)">
-              <button id="export-review-csv">导出复核 CSV</button>
-            </div>
-          </div>
-          <div>
-            <div class="section-head">
-              <h2>标注明细</h2>
-              <p>列结构与 eval/manual_review_template.csv 对齐</p>
-            </div>
-            <div id="review-table"></div>
-          </div>
-        </section>
       </main>
     </div>
   </div>
@@ -256,6 +230,8 @@
     <span id="snackbar-text"></span>
   </div>
 
+  <script type="module" src="/agent-panel.js"></script>
+  <script type="module" src="/agent-chat.js"></script>
   <script src="/components.js"></script>
   <script src="/app.js"></script>
 </body>

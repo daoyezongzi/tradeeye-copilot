@@ -16,6 +16,7 @@ def _fmt_pct_plain(value: float) -> str:
 class ReceivableRevenueDivergenceRule:
     threshold_pct: float
     id: str = "receivable_revenue_divergence"
+    required_fact_ids: tuple[str, ...] = ("revenue",)
 
     def applies(self, ctx: Context) -> bool:
         return ctx.prior_year is not None
@@ -47,6 +48,7 @@ class ReceivableRevenueDivergenceRule:
 class InventoryRevenueDivergenceRule:
     threshold_pct: float
     id: str = "inventory_revenue_divergence"
+    required_fact_ids: tuple[str, ...] = ("revenue",)
 
     def applies(self, ctx: Context) -> bool:
         return ctx.prior_year is not None
@@ -78,6 +80,7 @@ class InventoryRevenueDivergenceRule:
 class CashflowQualityRule:
     threshold_pct: float
     id: str = "cashflow_quality"
+    required_fact_ids: tuple[str, ...] = ("operating_cash_flow", "net_profit")
 
     def applies(self, ctx: Context) -> bool:
         return ctx.current.net_profit not in (None, 0) and ctx.current.operating_cash_flow is not None
@@ -106,6 +109,7 @@ class CashflowQualityRule:
 class GrossMarginChangeRule:
     threshold_pct: float
     id: str = "gross_margin_change"
+    required_fact_ids: tuple[str, ...] = ("gross_margin_pct",)
 
     def applies(self, ctx: Context) -> bool:
         return ctx.prior_year is not None
@@ -132,6 +136,7 @@ class GrossMarginChangeRule:
 @dataclass(frozen=True)
 class NetProfitRevenueDirectionRule:
     id: str = "net_profit_revenue_direction"
+    required_fact_ids: tuple[str, ...] = ("revenue", "net_profit")
 
     def applies(self, ctx: Context) -> bool:
         return ctx.prior_year is not None

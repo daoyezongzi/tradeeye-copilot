@@ -18,15 +18,15 @@ def css() -> str:
     return Path("web/styles.css").read_text(encoding="utf-8")
 
 
-def test_workbench_information_architecture_has_three_views(html):
-    for view in ["workbench", "company", "review"]:
+def test_workbench_information_architecture_has_two_researcher_views(html):
+    for view in ["workbench", "company"]:
         assert f'id="view-{view}"' in html
         assert f'id="tab-{view}"' in html
+    for removed in ["review", "diagnostics"]:
+        assert f'id="view-{removed}"' not in html
+        assert f'id="tab-{removed}"' not in html
     assert 'role="tablist"' in html
     assert 'role="tabpanel"' in html
-    # 扫描诊断已降为工作台折叠区，不再是顶级视图
-    assert 'id="view-diagnostics"' not in html
-    assert 'id="tab-diagnostics"' not in html
 
 
 def test_advanced_sections_are_collapsed_disclosures(html, css):
@@ -61,18 +61,18 @@ def test_job_history_has_refresh_and_restore_controls(html, js):
 
 
 
-def test_developer_panel_visualizes_automation_feishu_and_review_sync(html, js):
+def test_developer_panel_keeps_operations_without_review_exposure(html, js):
     assert 'id="automation-date" type="date"' in html
     assert 'id="run-automation"' in html
     assert 'id="automation-status"' in html
     assert 'id="refresh-notify-logs"' in html
     assert 'id="notify-log-table"' in html
-    assert 'id="review-sync-status"' in html
+    assert 'id="review-sync-status"' not in html
     assert "runDisclosureAutomation" in js
     assert "listNotifyLogs" in js
     assert "renderAutomationStatus" in js
     assert "renderNotifyLogs" in js
-    assert "renderReviewSyncStatus" in js
+    assert "renderReviewSyncStatus" not in js
     assert '"/api/automation/disclosure-day"' in js
     assert '"/api/notify/logs?limit="' in js
     assert 'el("run-automation").addEventListener("click", runAutomation)' in js
@@ -105,6 +105,24 @@ def test_company_names_come_from_meta_route(js):
     assert '"/api/meta"' in js
     assert "function displayName(tsCode)" in js
     assert "state.meta.company_names[tsCode]" in js
+
+
+def test_navigation_views_exclude_review_route(js):
+    assert 'const VIEWS = ["workbench", "company"]' in js
+    assert 'review: "复核队列"' not in js
+    assert 'if (VIEWS.includes(parts[0])) return { view: parts[0] };' in js
+    assert 'navigate("#/workbench")' in js
+
+
+def test_company_display_is_name_first_with_code_subtitle(js):
+    assert "function companyTitle(tsCode)" in js
+    assert "function companySubtitle(tsCode, period)" in js
+    assert "return displayName(tsCode) || tsCode;" in js
+    assert "return `${tsCode} · ${periodLabel(period)}`;" in js
+    assert "name.textContent = companyTitle(card.ts_code);" in js
+    assert "code.textContent = companySubtitle(card.ts_code, card.period);" in js
+    assert "title: companyTitle(card.ts_code)" in js
+    assert "subtitle: companySubtitle(card.ts_code, card.period)" in js
 
 
 def test_scan_progress_reports_elapsed_time(html, js, css):
@@ -157,34 +175,42 @@ def test_stable_hash_urls_for_day_and_company(js):
     assert 'window.addEventListener("hashchange", applyRoute)' in js
 
 
-def test_review_state_ui_uses_backend_review_labels(html, js):
-    assert 'id="view-review"' in html
-    assert 'id="export-review-csv"' in html
-    assert 'id="clear-review"' not in html
-    assert "REVIEW_STORAGE_KEY" not in js
-    assert "window.localStorage" not in js
-    assert "renderReviewActions" in js
-    assert "loadReviewLabels" in js
-    assert "saveReviewLabel" in js
-    assert "clearReviewLabel" in js
-    assert "loadReviewMetrics" in js
-    assert '"/api/reviews/labels"' in js
-    assert '"/api/reviews/metrics"' in js
-    assert '"/api/reviews/labels.csv"' in js
-    # 列结构需与 eval/manual_review_template.csv 对齐，并保留评估分组需要的维度
+def test_researcher_frontend_does_not_expose_review_ui_or_calls(html, js):
+    for marker in [
+        'id="view-review"',
+        'id="tab-review"',
+        'id="review-metrics"',
+        'id="review-table"',
+        'id="export-review-csv"',
+        'id="review-sync-status"',
+        'class="review-actions"',
+        "renderReviewActions",
+        "loadReviewLabels",
+        "loadReviewMetrics",
+        "renderReviewMetrics",
+        "renderReviewSyncStatus",
+        "exportReviewCsv",
+        "saveReviewLabel",
+        "clearReviewLabel",
+        "setReviewLabel",
+        "reviewLabels",
+        '"/api/reviews/labels"',
+        '"/api/reviews/metrics"',
+        "precision_pct",
+        "精确率",
+    ]:
+        assert marker not in html
+        assert marker not in js
     template_header = Path("eval/manual_review_template.csv").read_text(encoding="utf-8").splitlines()[0]
     assert template_header == "ts_code,period,rule_id,label,notes,severity,industry"
-    expected = '["' + '", "'.join(template_header.split(",")) + '"]'
-    assert expected in js
-    assert "severity: card.max_severity || \"\"" in js
-    assert "industry: scanEvent?.industry || \"unknown\"" in js
 
 
 def test_rendering_escapes_untrusted_values(js):
     assert "function escapeHtml(value)" in js
     # 表格用 innerHTML 拼接，每个插值都必须转义
     assert "escapeHtml(event.message)" in js
-    assert "escapeHtml(entry.rule_id)" in js
+    assert "escapeHtml(event.ts_code)" in js
+    assert "escapeHtml(event.status)" in js
     # 公司卡走 textContent，不用 innerHTML
     assert ".innerHTML = `" not in js.split("function renderCard(")[1].split("function renderDataProblemGroup(")[0]
 

@@ -19,12 +19,9 @@ const diagnosticStatus = el("diagnostic-status");
 const jobHistory = el("job-history");
 const automationStatus = el("automation-status");
 const notifyLogTable = el("notify-log-table");
-const reviewSyncStatus = el("review-sync-status");
 const quarterlyReview = el("quarterly-review");
 const operationStatus = el("operation-status");
 const metaStatus = el("meta-status");
-const reviewMetrics = el("review-metrics");
-const reviewTable = el("review-table");
 
 const evidenceDialog = el("evidence-dialog");
 const evidenceContent = el("evidence-content");
@@ -40,8 +37,6 @@ const snackbarText = el("snackbar-text");
 
 /* ---------- 状态 ---------- */
 
-const REVIEW_EXPORT_COLUMNS = ["ts_code", "period", "rule_id", "label", "notes", "severity", "industry"];
-
 /* 严重度做双重编码：颜色 + 文字标签，色盲或黑白打印下仍可分辨 */
 const SEVERITY_META = {
   RED: { label: "需优先追问", tag: "RED", cls: "red", note: "规则判定为红色，建议当日跟进" },
@@ -51,13 +46,14 @@ const SEVERITY_META = {
 };
 
 const state = {
-  meta: { coverage_count: 0, company_names: {}, tushare_ready: false, feishu_ready: false },
+  meta: { coverage_count: 0, company_names: {}, tushare_ready: false, feishu_ready: false, agent_ready: false },
   bundle: null,
   filter: "all",
   previewDate: null,
   activeJobId: null,
   jobPollTimer: null,
-  reviewLabels: {},
+  agent: null,
+  agentPanel: null,
 };
 
 /* ---------- 日期与报告期 ---------- */
@@ -75,6 +71,14 @@ function toInputDate(value) {
 
 function selectedDate() {
   return toApiDate(el("disclosure-date").value);
+}
+
+async function waitForAgentModules() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (window.TradeEyeAgentPanel?.createAgentPanel && window.TradeEyeAgentChat?.createAgentChat) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Agent 前端模块未加载");
 }
 
 /* 报告期只有四个法定季末，倒序列出已过去的季末，未到的季末不可能有财报 */
@@ -148,6 +152,16 @@ const api = {
     });
   },
 
+  async agentChat(tsCode, period, question, sessionId = null) {
+    const payload = { ts_code: tsCode, period, question };
+    if (sessionId) payload.session_id = sessionId;
+    return requestJson("/api/agent/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
   async startDisclosureDayJob(date, resumeFromJobId = null) {
     const payload = resumeFromJobId ? { date, resume_from_job_id: resumeFromJobId } : { date };
     return requestJson("/api/disclosure-day/jobs", {
@@ -205,25 +219,6 @@ const api = {
     return requestJson("/api/quarterly");
   },
 
-  async listReviewLabels() {
-    return requestJson("/api/reviews/labels");
-  },
-
-  async saveReviewLabel(label) {
-    return requestJson("/api/reviews/labels", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(label),
-    });
-  },
-
-  async deleteReviewLabel(tsCode, period, ruleId) {
-    return requestJson(`/api/reviews/labels/${tsCode}/${period}/${ruleId}`, { method: "DELETE" });
-  },
-
-  async getReviewMetrics() {
-    return requestJson("/api/reviews/metrics");
-  },
 };
 
 function setStatus(payload) {
@@ -295,6 +290,24 @@ function displayName(tsCode) {
   return state.meta.company_names[tsCode] || "";
 }
 
+function companyTitle(tsCode) {
+  return displayName(tsCode) || tsCode;
+}
+
+function companySubtitle(tsCode, period) {
+  return `${tsCode} · ${periodLabel(period)}`;
+}
+
+function agentCardContext(card) {
+  return {
+    ts_code: card.ts_code,
+    period: card.period,
+    severity: severityKey(card),
+    title: companyTitle(card.ts_code),
+    subtitle: companySubtitle(card.ts_code, card.period),
+  };
+}
+
 function severityKey(card) {
   if (card.max_severity === "RED") return "RED";
   if (card.max_severity === "YELLOW") return "YELLOW";
@@ -347,11 +360,10 @@ function makeChapterHead(title, count, note) {
 
 /* ---------- 视图路由：hash 稳定 URL ---------- */
 
-const VIEWS = ["workbench", "company", "review"];
+const VIEWS = ["workbench", "company"];
 const VIEW_TITLES = {
   workbench: "披露日研判",
   company: "单票研判",
-  review: "复核队列",
 };
 
 function activateView(view) {
@@ -379,6 +391,11 @@ function parseHash() {
 async function applyRoute() {
   const route = parseHash();
   activateView(route.view);
+
+  if (!route.date && !route.tsCode && window.location.hash !== `#/${route.view}`) {
+    navigate("#/workbench");
+    return;
+  }
 
   if (route.expandDiagnostics) {
     el("adv-diagnostics").open = true;
@@ -549,36 +566,6 @@ function renderFinding(card, finding) {
   return item;
 }
 
-function renderReviewActions(card) {
-  const wrap = document.createElement("div");
-  wrap.className = "review-actions";
-  const ruleId = card.findings[0]?.rule_id || "";
-  const current = state.reviewLabels[reviewKey(card.ts_code, card.period, ruleId)];
-
-  for (const label of ["TRUE", "FALSE", "UNREVIEWED"]) {
-    const chip = makeChip(reviewLabelText(label));
-    chip.setAttribute("role", "button");
-    chip.setAttribute("tabindex", "0");
-    chip.setAttribute("aria-pressed", String((current?.label || "UNREVIEWED") === label));
-    const activate = () => {
-      setReviewLabel(card, label).then(() => {
-        renderCards();
-        renderReview();
-        loadReviewMetrics();
-      });
-    };
-    chip.addEventListener("click", activate);
-    chip.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        activate();
-      }
-    });
-    wrap.append(chip);
-  }
-  return wrap;
-}
-
 /* fact_line 形如「营收 12.3 亿 | 净利 1.2 亿」，拆成等宽分格，第一段是标签、其余是取值 */
 function renderFactLine(factLine) {
   const wrap = document.createElement("div");
@@ -622,10 +609,10 @@ function renderCard(card, options = {}) {
 
   const name = document.createElement("span");
   name.className = "card__name";
-  name.textContent = displayName(card.ts_code) || card.ts_code;
+  name.textContent = companyTitle(card.ts_code);
   const code = document.createElement("span");
   code.className = "card__code";
-  code.textContent = `${card.ts_code} · ${card.period}`;
+  code.textContent = companySubtitle(card.ts_code, card.period);
   const summary = document.createElement("span");
   summary.className = "card__sum";
   summary.textContent = card.findings[0]?.title || "规则未触发异常";
@@ -643,6 +630,7 @@ function renderCard(card, options = {}) {
     push.append(chevron);
     head.addEventListener("click", () => node.classList.toggle("open"));
   }
+  node.addEventListener("click", () => state.agent?.bindCard(agentCardContext(card)));
   head.append(name, code, summary, push);
 
   const body = document.createElement("div");
@@ -672,7 +660,7 @@ function renderCard(card, options = {}) {
   const permalink = document.createElement("a");
   permalink.href = `#/company/${card.ts_code}/${card.period}`;
   permalink.textContent = "打开公司详情";
-  foot.append(permalink, renderReviewActions(card));
+  foot.append(permalink);
   body.append(foot);
 
   node.append(head, body);
@@ -684,13 +672,13 @@ function renderDataProblemGroup(events) {
   table.className = "table-wrap";
   const rows = events
     .map((event) => {
-      const name = displayName(event.ts_code);
-      return `<tr><td class="mono">${escapeHtml(event.ts_code)}</td><td>${escapeHtml(name)}</td><td class="mono">${escapeHtml(event.period)}</td><td>${escapeHtml(event.industry || "unknown")}</td><td>${escapeHtml(event.status)}</td><td>${escapeHtml(event.message)}</td></tr>`;
+      const name = companyTitle(event.ts_code);
+      return `<tr><td>${escapeHtml(name)}</td><td class="mono">${escapeHtml(event.ts_code)}</td><td class="mono">${escapeHtml(periodLabel(event.period))}</td><td>${escapeHtml(event.industry || "unknown")}</td><td>${escapeHtml(event.status)}</td><td>${escapeHtml(event.message)}</td></tr>`;
     })
     .join("");
   table.innerHTML = `
     <table>
-      <thead><tr><th>代码</th><th>名称</th><th>报告期</th><th>行业</th><th>状态</th><th>原因</th></tr></thead>
+      <thead><tr><th>名称</th><th>代码</th><th>报告期</th><th>行业</th><th>状态</th><th>原因</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
@@ -730,7 +718,7 @@ function renderCards() {
       group.cards.forEach((card, index) => {
         if (index > 0) brief.append(document.createTextNode("、"));
         const name = document.createElement("b");
-        name.textContent = displayName(card.ts_code) || card.ts_code;
+        name.textContent = companyTitle(card.ts_code);
         brief.append(name);
       });
       brief.append(document.createTextNode("。仅汇总数量，不逐条展开。"));
@@ -798,7 +786,7 @@ function renderDiagnostics(result) {
   const rows = result.events
     .map(
       (event) =>
-        `<tr><td class="mono">${escapeHtml(event.ts_code)}</td><td>${escapeHtml(displayName(event.ts_code))}</td><td class="mono">${escapeHtml(event.period)}</td><td>${escapeHtml(event.industry || "unknown")}</td><td>${escapeHtml(event.status)}</td><td>${escapeHtml(event.message)}</td></tr>`
+        `<tr><td>${escapeHtml(companyTitle(event.ts_code))}</td><td class="mono">${escapeHtml(event.ts_code)}</td><td class="mono">${escapeHtml(periodLabel(event.period))}</td><td>${escapeHtml(event.industry || "unknown")}</td><td>${escapeHtml(event.status)}</td><td>${escapeHtml(event.message)}</td></tr>`
     )
     .join("");
   table.innerHTML = `
@@ -849,7 +837,6 @@ async function runAutomation() {
     const result = await api.runDisclosureAutomation(date, true);
     renderAutomationStatus(result);
     await loadNotifyLogs();
-    await loadReviewLabels();
     notify(`${date} 自动化运行完成`);
   } catch (error) {
     automationStatus.replaceChildren(makeEmpty(error.message));
@@ -890,143 +877,6 @@ async function loadNotifyLogs() {
     setStatus({ error: error.message });
     return [];
   }
-}
-
-function renderReviewSyncStatus(labels = Object.values(state.reviewLabels)) {
-  const reviewed = labels.length;
-  const reviewers = new Set(labels.map((label) => label.reviewer).filter(Boolean));
-  reviewSyncStatus.className = "metric-grid";
-  const items = [
-    { label: "后端标签", value: reviewed },
-    { label: "回写人", value: reviewers.size || "待回写" },
-  ];
-  reviewSyncStatus.replaceChildren(
-    ...items.map((item) => {
-      const node = document.createElement("div");
-      node.className = "metric";
-      const label = document.createElement("span");
-      label.textContent = item.label;
-      const value = document.createElement("strong");
-      value.textContent = String(item.value);
-      node.append(label, value);
-      return node;
-    })
-  );
-}
-
-function reviewKey(tsCode, period, ruleId) {
-  return `${tsCode}|${period}|${ruleId}`;
-}
-
-function reviewLabelText(label) {
-  if (label === "TRUE") return "✓ 有效";
-  if (label === "FALSE") return "✗ 误报";
-  return "待复核";
-}
-
-function loadReviewLabels() {
-  return api.listReviewLabels().then((labels) => {
-    state.reviewLabels = Object.fromEntries(labels.map((entry) => [reviewKey(entry.ts_code, entry.period, entry.rule_id), entry]));
-    renderCards();
-    renderReview();
-    renderReviewSyncStatus(labels);
-    return labels;
-  });
-}
-
-async function saveReviewLabel(card, label) {
-  const scanEvent = state.bundle?.scan.events.find((event) => event.ts_code === card.ts_code && event.period === card.period);
-  const saved = await api.saveReviewLabel({
-    ts_code: card.ts_code,
-    period: card.period,
-    rule_id: card.findings[0]?.rule_id || "",
-    label,
-    notes: "",
-    severity: card.max_severity || "",
-    industry: scanEvent?.industry || "unknown",
-  });
-  state.reviewLabels[reviewKey(saved.ts_code, saved.period, saved.rule_id)] = saved;
-  return saved;
-}
-
-async function clearReviewLabel(card) {
-  const ruleId = card.findings[0]?.rule_id || "";
-  const current = state.reviewLabels[reviewKey(card.ts_code, card.period, ruleId)];
-  const targetRuleId = current?.rule_id || ruleId;
-  if (targetRuleId) {
-    await api.deleteReviewLabel(card.ts_code, card.period, targetRuleId);
-  }
-  delete state.reviewLabels[reviewKey(card.ts_code, card.period, targetRuleId)];
-}
-
-async function setReviewLabel(card, label) {
-  try {
-    if (label === "UNREVIEWED") {
-      await clearReviewLabel(card);
-    } else {
-      await saveReviewLabel(card, label);
-    }
-    notify(`${card.ts_code} 已标注为${reviewLabelText(label)}`);
-  } catch (error) {
-    setStatus({ error: error.message });
-    notify(error.message, true);
-  }
-}
-
-async function loadReviewMetrics() {
-  try {
-    const metrics = await api.getReviewMetrics();
-    renderReviewMetrics(metrics);
-  } catch (error) {
-    setStatus({ error: error.message });
-  }
-}
-
-function renderReviewMetrics(metrics) {
-  const overall = metrics?.overall || {};
-  const items = [
-    { label: "已复核", value: overall.reviewed_count || 0 },
-    { label: "✓ 有效", value: overall.true_positive_count || 0 },
-    { label: "✗ 误报", value: overall.false_positive_count || 0 },
-    { label: "精确率", value: overall.precision_pct == null ? "待复核" : `${overall.precision_pct.toFixed(1)}%` },
-  ];
-  reviewMetrics.replaceChildren(
-    ...items.map((item) => {
-      const node = document.createElement("div");
-      node.className = typeof item.value === "number" ? "metric" : "metric wide";
-      const label = document.createElement("span");
-      label.textContent = item.label;
-      const value = document.createElement("strong");
-      value.textContent = String(item.value);
-      node.append(label, value);
-      return node;
-    })
-  );
-}
-
-function renderReview() {
-  const entries = Object.values(state.reviewLabels);
-
-  if (entries.length === 0) {
-    reviewTable.replaceChildren(makeEmpty("尚无标注，在工作台公司卡上标注有效或误报"));
-    return;
-  }
-
-  const wrap = document.createElement("div");
-  wrap.className = "table-wrap";
-  const rows = entries
-    .map(
-      (entry) =>
-        `<tr><td class="mono">${escapeHtml(entry.ts_code)}</td><td>${escapeHtml(displayName(entry.ts_code))}</td><td class="mono">${escapeHtml(entry.period)}</td><td>${escapeHtml(entry.rule_id)}</td><td>${escapeHtml(entry.label)}</td></tr>`
-    )
-    .join("");
-  wrap.innerHTML = `
-    <table>
-      <thead><tr><th>代码</th><th>名称</th><th>报告期</th><th>rule_id</th><th>label</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
-  reviewTable.replaceChildren(wrap);
 }
 
 /* ---------- 导出 ---------- */
@@ -1070,7 +920,7 @@ function exportBundleCsv() {
     const top = card?.findings[0];
     return [
       event.ts_code,
-      displayName(event.ts_code),
+      companyTitle(event.ts_code),
       event.period,
       event.industry || "unknown",
       event.status,
@@ -1083,11 +933,6 @@ function exportBundleCsv() {
   });
   const header = ["ts_code", "name", "period", "industry", "status", "max_severity", "finding_count", "top_rule_id", "top_title", "detail"];
   downloadFile(`tradeeye-${state.bundle.date}.csv`, toCsv(header, rows), "text/csv");
-}
-
-function exportReviewCsv() {
-  window.location.href = "/api/reviews/labels.csv";
-  notify("正在导出 review labels CSV");
 }
 
 /* ---------- 数据加载 ---------- */
@@ -1306,6 +1151,7 @@ async function loadCompany(tsCode, period) {
     companyPermalinkHint.textContent = `固定链接 #/company/${tsCode}/${period}`;
     if (result.card) {
       companyDetail.replaceChildren(renderCard(result.card, { standalone: true }));
+      state.agent?.bindCard(agentCardContext(result.card));
     } else {
       companyDetail.replaceChildren(makeEmpty(`${result.status}：${result.message}`));
     }
@@ -1326,7 +1172,6 @@ async function loadQuarterly() {
       { label: "覆盖池", value: review.coverage_count },
       { label: "已披露", value: review.disclosed_count },
       { label: "命中", value: review.finding_count },
-      { label: "精确率", value: review.precision_pct === null ? "待复核" : `${review.precision_pct}%` },
       ...review.top_rules.map((item) => ({ label: item.rule_id, value: item.count })),
     ];
     quarterlyReview.replaceChildren(
@@ -1354,6 +1199,38 @@ async function showEvidence(card, finding) {
     evidenceDialog.showModal();
   } catch (error) {
     notify(error.message, true);
+  }
+}
+
+async function showAgentReference(reference) {
+  evidenceContent.textContent = JSON.stringify(reference, null, 2);
+  evidenceDialog.showModal();
+}
+
+function initAgentPanel() {
+  const panel = window.TradeEyeAgentPanel.createAgentPanel({
+    mount: document.body,
+    onReference: showAgentReference,
+  });
+  const chat = window.TradeEyeAgentChat.createAgentChat({
+    panel,
+    api,
+    executors: {
+      refetchCompany: async (tsCode, period) => {
+        navigate(`#/company/${tsCode}/${period}`);
+        await loadCompany(tsCode, period);
+      },
+      rescanDisclosureDay: async (date) => {
+        el("disclosure-date").value = toInputDate(date);
+        navigate("#/workbench");
+        await loadDisclosureDay(date);
+      },
+    },
+  });
+  state.agentPanel = panel;
+  state.agent = chat;
+  if (!state.meta.agent_ready) {
+    panel.setDisabled(true, "Agent 未配置 LLM");
   }
 }
 
@@ -1459,7 +1336,6 @@ createMenuButton({
     { id: "export-menu-csv", label: "导出 CSV", onSelect: exportBundleCsv },
   ],
 });
-el("export-review-csv").addEventListener("click", exportReviewCsv);
 
 for (const button of document.querySelectorAll("#severity-filters button")) {
   button.addEventListener("click", () => {
@@ -1482,13 +1358,9 @@ async function boot() {
   el("automation-date").value = el("disclosure-date").value;
   initPeriodSelect("20250630");
   await loadMeta();
+  await waitForAgentModules();
+  initAgentPanel();
   renderCards();
-  renderReview();
-  loadReviewLabels().catch((error) => {
-    setStatus({ error: error.message });
-    notify(error.message, true);
-  });
-  loadReviewMetrics();
   loadQuarterly();
   loadJobHistory();
   loadNotifyLogs();

@@ -1,5 +1,94 @@
 # TradeEye Copilot 开发日志
 
+## 2026-08-02
+
+### 阶段归档:Agent 前端问答浮层对接
+
+本阶段在 Agent 后端问答接口之上补齐研究员前端人机交互闭环：新增浮层 Agent 面板（默认右侧停靠、可拖离、拖回右缘吸附、右下角药丸入口），按卡分组保留会话历史，顶部显式显示当前答疑对象；换卡新起后端 session，但可见历史不清空。前端复用项目原生 HTML/CSS/JS、现有 token、现有单票分析与披露日 job 轮询，不压缩主区宽度。
+
+后端契约扩展 `AgentAction` / `actions`：Agent 只提出 `refetch_company` 与 `rescan_disclosure_day` 两类动作建议，不执行动作；前端动作卡作为确认门，研究员点确认后才调用既有 `/api/analyze/company` 或 `/api/disclosure-day/jobs`。`AppMeta` 新增 `agent_ready`，前端可在初始化时禁用未配置 LLM 的 Agent 输入框。
+
+实现文件与测试：
+
+- `web/agent-panel.js`：浮层窗口、拖动/吸附、分组消息、动作卡、引用 chip。
+- `web/agent-chat.js`：卡片绑定、sessionId 复用/重置、Agent chat 请求、动作分发。
+- `web/agent-panel.test.mjs` / `web/agent-chat.test.mjs`：Node 内置 `node:test` 零依赖测试，覆盖几何、localStorage、滚动判定、session 与动作分发。
+- `tests/test_agent_actions.py` / `tests/test_api_meta.py`：后端动作白名单、参数校验、`agent_ready` 与 API response 契约。
+
+自审结论：
+
+- Agent 工具白名单保持只读；动作只是回答契约，不是后端写工具。
+- 未加入 slash command、流式输出、停止生成按钮或复核标注类动作。
+- 生产代码无 review-label Agent action；grep 唯一 review-label 命中为既有 CSV 导出提示。
+- 当前实现仍在 `worktree-agent-fact-contract` 工作树，尚未合并到 main；从 main 目录启动看不到 Agent 入口。
+
+验证：
+
+```bash
+python -m pytest --basetemp=.pytest_tmp -q
+npm test
+node --check web/app.js
+node --check web/agent-panel.js
+node --check web/agent-chat.js
+```
+
+结果：
+
+```text
+234 passed
+12 passed
+```
+
+后续待办：
+
+- 调整右下角 Agent 入口：由文字药丸改为小圆形按钮，图标使用小机器人，降低视觉重量。
+- 评估「复核队列」与「单票研判」导航是否冗余：确认真实使用路径后决定合并、降级或保留。
+
+### 阶段归档:Agent 后端问答接口
+
+研究员问答闭环:一卡一会话的 SQLite 会话存储,单票问题用研判卡预置上下文回答,回答附带事实/证据引用并做真实性硬校验;跨票、披露汇总与扫描状态问题走白名单只读工具通道(JSON 协议,至多 2 次 LLM 调用)。LLM 接入从 .env 读取(LLM_BASE_URL / LLM_MODEL / ASCEND_API_KEY),config.yaml 默认值兜底;`POST /api/agent/chat` 无鉴权,与现有分析接口一致。自由文本审核器挂起为待办,不修改 `web/`。
+
+验证:
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+git diff --check
+```
+
+结果:
+
+```text
+228 passed
+```
+
+### 阶段归档:Agent 事实输出接口与行业分类预留
+
+### 阶段归档：Agent 事实输出接口与行业分类预留
+
+本阶段只扩展后端接口，不修改 `web/`。保留 `CompanyCard` 旧字段，新增结构化 `facts`、`classification`、`rule_results`、`card_status`，为研判卡事实高亮和右侧 Agent 上下文预留稳定标识。
+
+- Tushare 公司基础资料（`stock_basic`）提供外部行业标签；已配置标签映射到特殊 profile（当前 `银行: bank_v1`），未映射行业使用现有 generic 通用规则。
+- `resolve_classification()` 按确定性规则生成 `MAPPED` / `UNMAPPED` / `UNAVAILABLE`，`generic` 只表示通用规则 profile，不声称已确认行业。
+- 每个 `VERIFIED` 事实绑定报告期、工具来源、字段和原始值；缺失/无效事实不能生成 `MISS`，依赖规则为 `NOT_EVALUATED`。
+- `evaluate_rule_results()` 依据规则声明的 `required_fact_ids` 输出 `HIT` / `MISS` / `NOT_EVALUATED`；`run_rules()` 保留原 Finding 输出。
+- 卡片含 `UNAVAILABLE` / `INVALID` 事实时状态为 `PARTIAL`，其余已验证事实仍保留。
+- `AnalyzerService` 优先使用 Tushare profile，`company_industries` 保留为兼容路径；公司资料获取失败不阻断财务分析，生成 `UNAVAILABLE` 分类继续通用规则。
+- API 导出 `AgentFactContext` 作为契约预留，不实现对话接口；Agent 不参与数字计算、来源选择或规则判定。
+- 现有前端未修改，旧 `fact_line` 保留为兼容展示，结构化 `facts` 才是事实主数据。
+
+验证：
+
+```bash
+python -m pytest -q --basetemp=.pytest_tmp
+git diff --check HEAD~4..HEAD
+```
+
+结果：
+
+```text
+204 passed
+```
+
 ## 2026-07-31
 
 ### 阶段归档：开发者区自动化与飞书联调状态可视化

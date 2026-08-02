@@ -1,5 +1,16 @@
-from copilot.models import Context, Evidence, Finding, Severity
-from copilot.report.builder import build_company_card, build_daily_summary
+from copilot.models import (
+    CardStatus,
+    ClassificationResult,
+    Context,
+    Evidence,
+    FactStatus,
+    Finding,
+    MappingStatus,
+    RuleResult,
+    RuleResultStatus,
+    Severity,
+)
+from copilot.report.builder import CompanyCard, build_company_card, build_daily_summary
 
 
 def finding(rule_id, severity, score):
@@ -41,3 +52,186 @@ def test_build_daily_summary_counts_severity(make_snapshot):
     assert summary.yellow_count == 1
     assert summary.ok_count == 1
     assert summary.cards[0].max_score == 80.0
+
+
+def test_legacy_company_card_data_keeps_new_fields_compatible():
+    card = CompanyCard(
+        ts_code="000001.SZ",
+        period="20250630",
+        fact_line="营收 128.4",
+        findings=[],
+    )
+
+    assert card.facts == []
+    assert card.rule_results == []
+    assert card.card_status == CardStatus.OK
+
+
+def test_company_card_serializes_structured_contract():
+    classification = ClassificationResult(
+        provider="tushare.stock_basic",
+        provider_industry="银行",
+        mapping_status=MappingStatus.MAPPED,
+        rule_profile_id="bank_v1",
+    )
+    rule_result = RuleResult(
+        rule_id="gross_margin_change",
+        status=RuleResultStatus.MISS,
+        required_fact_ids=["gross_margin_pct"],
+    )
+    card = CompanyCard(
+        ts_code="000001.SZ",
+        period="20250630",
+        fact_line="营收 128.4",
+        findings=[],
+        classification=classification,
+        facts=[],
+        rule_results=[rule_result],
+    )
+
+    payload = card.model_dump()
+    assert payload["classification"]["rule_profile_id"] == "bank_v1"
+    assert payload["rule_results"][0]["status"] == "MISS"
+
+
+def test_build_company_card_preserves_legacy_call_and_builds_verified_facts(make_snapshot):
+    ctx = Context(ts_code="000001.SZ", current=make_snapshot())
+
+    card = build_company_card(ctx, [])
+
+    assert len(card.facts) == 5
+    assert all(fact.status == FactStatus.VERIFIED for fact in card.facts)
+    assert card.rule_results == []
+    assert card.card_status == CardStatus.OK
+
+
+def test_company_card_rejects_not_applicable_fact_without_matching_profile():
+    fact = Fact(
+        fact_id="gross_margin_pct",
+        label="毛利率",
+        period="20250630",
+        status=FactStatus.NOT_APPLICABLE,
+        applicability_profile_id="bank_v1",
+        reason_code="INDUSTRY_NOT_APPLICABLE",
+        reason="bank_v1 未使用毛利率口径",
+    )
+    classification = ClassificationResult(
+        provider="tushare.stock_basic",
+        provider_industry="银行",
+        mapping_status=MappingStatus.MAPPED,
+        rule_profile_id="other_v1",
+    )
+    with pytest.raises(ValidationError):
+        CompanyCard(
+            ts_code="000001.SZ",
+            period="20250630",
+            fact_line="",
+            findings=[],
+            classification=classification,
+            facts=[fact],
+        )
+
+
+def test_company_card_accepts_not_applicable_fact_from_mapped_profile():
+    fact = Fact(
+        fact_id="gross_margin_pct",
+        label="毛利率",
+        period="20250630",
+        status=FactStatus.NOT_APPLICABLE,
+        applicability_profile_id="bank_v1",
+        reason_code="INDUSTRY_NOT_APPLICABLE",
+        reason="bank_v1 未使用毛利率口径",
+    )
+    classification = ClassificationResult(
+        provider="tushare.stock_basic",
+        provider_industry="银行",
+        mapping_status=MappingStatus.MAPPED,
+        rule_profile_id="bank_v1",
+    )
+    card = CompanyCard(
+        ts_code="000001.SZ",
+        period="20250630",
+        fact_line="",
+        findings=[],
+        classification=classification,
+        facts=[fact],
+    )
+    assert card.facts[0].status == FactStatus.NOT_APPLICABLE
+
+
+from pydantic import ValidationError
+import pytest
+
+from copilot.models import Fact, FactStatus
+from copilot.report.builder import CompanyCard
+
+
+def test_company_card_rejects_ok_with_invalid_fact():
+    fact = Fact(
+        fact_id="revenue",
+        label="营业收入",
+        period="20250630",
+        status=FactStatus.INVALID,
+        reason_code="HARD_CHECK_FAILED",
+        reason="校验失败",
+    )
+    with pytest.raises(ValidationError):
+        CompanyCard(
+            ts_code="000001.SZ",
+            period="20250630",
+            fact_line="营收 NA",
+            findings=[],
+            facts=[fact],
+        )
+
+
+def test_company_card_accepts_partial_with_invalid_fact():
+    fact = Fact(
+        fact_id="revenue",
+        label="营业收入",
+        period="20250630",
+        status=FactStatus.INVALID,
+        reason_code="HARD_CHECK_FAILED",
+        reason="校验失败",
+    )
+    card = CompanyCard(
+        ts_code="000001.SZ",
+        period="20250630",
+        fact_line="营收 NA",
+        findings=[],
+        facts=[fact],
+        card_status="PARTIAL",
+    )
+    assert card.card_status == "PARTIAL"
+
+
+def test_company_card_allows_blocked_without_facts():
+    card = CompanyCard(
+        ts_code="000001.SZ",
+        period="20250630",
+        fact_line="",
+        findings=[],
+        card_status="BLOCKED",
+    )
+    assert card.facts == []
+
+
+def test_build_company_card_includes_verified_facts_with_evidence(make_snapshot):
+    ctx = Context(ts_code="000001.SZ", current=make_snapshot(revenue=128.4))
+    card = build_company_card(ctx, [], classification=None)
+
+    revenue = next(item for item in card.facts if item.fact_id == "revenue")
+    assert revenue.status == FactStatus.VERIFIED
+    assert revenue.period == "20250630"
+    assert revenue.evidence.source == "tushare.income"
+    assert revenue.evidence.field == "revenue"
+    assert revenue.evidence.value == 128.4
+
+
+def test_missing_fact_is_unavailable_and_card_is_partial(make_snapshot):
+    ctx = Context(ts_code="000001.SZ", current=make_snapshot(gross_margin_pct=None))
+    card = build_company_card(ctx, [], classification=None)
+
+    margin = next(item for item in card.facts if item.fact_id == "gross_margin_pct")
+    assert margin.status == FactStatus.UNAVAILABLE
+    assert card.card_status.value == "PARTIAL"

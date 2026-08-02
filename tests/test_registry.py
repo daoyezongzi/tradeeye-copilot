@@ -1,6 +1,6 @@
 from copilot.config import RuleThresholds
-from copilot.models import Context
-from copilot.rules.registry import build_rules, run_rules
+from copilot.models import Context, RuleResultStatus
+from copilot.rules.registry import build_rules, evaluate_rule_results, run_rules
 
 
 def test_build_rules_contains_six_arithmetic_rules():
@@ -38,3 +38,12 @@ def test_run_rules_sorts_findings_by_score_desc(make_snapshot):
     ]
     assert findings[0].severity == findings[1].severity
     assert findings[0].score >= findings[1].score
+
+
+def test_missing_rule_inputs_are_not_evaluated(make_snapshot):
+    ctx = Context(ts_code="000001.SZ", current=make_snapshot(gross_margin_pct=None))
+    results = evaluate_rule_results(ctx, build_rules(RuleThresholds()))
+
+    margin = next(item for item in results if item.rule_id == "gross_margin_change")
+    assert margin.status == RuleResultStatus.NOT_EVALUATED
+    assert margin.status != RuleResultStatus.MISS

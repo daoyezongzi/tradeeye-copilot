@@ -215,6 +215,8 @@ eval:
     300760.SZ: generic
     605069.SH: generic
     600809.SH: generic
+  industry_profiles:
+    银行: bank_v1
   start_date: '20250801'
   end_date: '20250831'
   benchmark_output: artifacts/benchmark.json
