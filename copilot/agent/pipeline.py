@@ -1,8 +1,10 @@
 import json
 from typing import Protocol
 
+from pydantic import ValidationError
+
 from copilot.agent.context import SYSTEM_PROMPT, build_preset_context
-from copilot.agent.contracts import AgentChatResult, AgentReference
+from copilot.agent.contracts import AgentAction, AgentChatResult, AgentReference
 from copilot.agent.exceptions import AgentCardNotFound, AgentLLMError, AgentSessionMismatch, AgentToolError
 from copilot.agent.references import ReferenceValidator
 from copilot.agent.store import AgentSession
@@ -35,6 +37,23 @@ def _parse_references(payload: dict) -> list[dict]:
     if not isinstance(raw, list):
         return []
     return [item for item in raw if isinstance(item, dict)]
+
+
+def _parse_actions(payload: dict, limit: int = 2) -> list[AgentAction]:
+    raw = payload.get("actions")
+    if not isinstance(raw, list):
+        return []
+    kept: list[AgentAction] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            kept.append(AgentAction(**item))
+        except ValidationError:
+            continue
+        if len(kept) >= limit:
+            break
+    return kept
 
 
 class AgentService:
@@ -99,6 +118,7 @@ class AgentService:
             evidence_ids=list({evidence.evidence_id for fact in card.facts if fact.evidence is not None for evidence in [fact.evidence]}) + extra_evidence_ids,
         )
         references = validator.filter(_parse_references(payload))
+        actions = _parse_actions(payload)
 
         self.store.append_message(session.session_id, "user", question)
         assistant_message = self.store.append_message(
@@ -112,6 +132,7 @@ class AgentService:
             answer=answer,
             references=references,
             message_id=assistant_message.message_id,
+            actions=actions,
         )
 
     def _run_tool_once(self, messages: list[ChatMessage], payload: dict) -> tuple[list[ChatMessage], list[str], list[str]]:
