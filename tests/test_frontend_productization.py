@@ -125,6 +125,16 @@ def test_company_display_is_name_first_with_code_subtitle(js):
     assert "subtitle: companySubtitle(card.ts_code, card.period)" in js
 
 
+def test_single_company_input_supports_company_name_candidates(html, js):
+    assert 'list="company-ts-code-options"' in html
+    assert 'id="company-ts-code-options"' in html
+    assert "function renderCompanyOptions()" in js
+    assert "function resolveCompanyInput(value)" in js
+    assert "renderCompanyOptions();" in js
+    assert 'const resolved = resolveCompanyInput(el("company-ts-code").value);' in js
+    assert 'notify("请输入覆盖池内的股票代码或公司名称", true);' in js
+
+
 def test_scan_progress_reports_elapsed_time(html, js, css):
     assert 'id="scan-progress"' in html
     assert 'role="progressbar"' in html

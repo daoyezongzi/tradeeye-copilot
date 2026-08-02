@@ -87,6 +87,26 @@ export function formatAgentCard(card) {
   };
 }
 
+export const agentDisabledGuidance = "Agent 问答需要配置外部 LLM API 后启用；当前仍可查看公司卡、依据弹窗和确定性 finding。";
+
+function valueOrMissing(value) {
+  if (value === null || value === undefined || value === "") return "未提供";
+  return String(value);
+}
+
+export function formatAgentReference(reference = {}) {
+  return {
+    rows: [
+      { label: "类型或规则", value: valueOrMissing(reference.rule_id || reference.kind || reference.title) },
+      { label: "来源", value: valueOrMissing(reference.source) },
+      { label: "字段", value: valueOrMissing(reference.field) },
+      { label: "期间", value: valueOrMissing(reference.period) },
+      { label: "数值", value: valueOrMissing(reference.value) },
+    ],
+    raw: JSON.stringify(reference, null, 2),
+  };
+}
+
 function createMessage(role, text, references = [], options = {}) {
   const node = document.createElement("div");
   node.className = `agent-message agent-message--${role}`;
@@ -487,5 +507,5 @@ export function createAgentPanel({ mount = document.body, onSend = null, onActio
 }
 
 if (typeof window !== "undefined") {
-  window.TradeEyeAgentPanel = { createAgentPanel };
+  window.TradeEyeAgentPanel = { createAgentPanel, agentDisabledGuidance, formatAgentReference };
 }

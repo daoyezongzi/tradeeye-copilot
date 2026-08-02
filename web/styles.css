@@ -872,6 +872,11 @@ body {
   color: var(--md-sys-color-on-surface-muted);
 }
 
+.field__hint {
+  color: var(--md-sys-color-on-surface-muted);
+  font-size: 12px;
+}
+
 input[type="text"],
 input[type="date"],
 select {
@@ -1416,6 +1421,41 @@ dialog::backdrop {
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--md-sys-color-on-surface-variant);
+}
+
+.evidence-card {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.evidence-card__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.evidence-card__grid > div {
+  padding: var(--space-2);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.evidence-card dt {
+  margin: 0 0 var(--space-1);
+  color: var(--md-sys-color-on-surface-muted);
+  font-size: 12px;
+}
+
+.evidence-card dd {
+  margin: 0;
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.evidence-card__raw {
+  margin: 0;
 }
 
 .dialog__foot {

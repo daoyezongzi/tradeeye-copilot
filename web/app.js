@@ -298,6 +298,37 @@ function companySubtitle(tsCode, period) {
   return `${tsCode} · ${periodLabel(period)}`;
 }
 
+function renderCompanyOptions() {
+  const options = el("company-ts-code-options");
+  if (!options) return;
+  const entries = Object.entries(state.meta.company_names || {}).sort((a, b) => a[1].localeCompare(b[1], "zh-Hans-CN"));
+  options.replaceChildren(
+    ...entries.map(([tsCode, name]) => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.label = tsCode;
+      return option;
+    }),
+    ...entries.map(([tsCode, name]) => {
+      const option = document.createElement("option");
+      option.value = tsCode;
+      option.label = name;
+      return option;
+    }),
+  );
+}
+
+function resolveCompanyInput(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  const upper = normalized.toUpperCase();
+  if (/^\d{6}\.(SZ|SH|BJ)$/.test(upper)) return upper;
+  for (const [tsCode, name] of Object.entries(state.meta.company_names || {})) {
+    if (name === normalized) return tsCode;
+  }
+  return "";
+}
+
 function agentCardContext(card) {
   return {
     ts_code: card.ts_code,
@@ -944,6 +975,7 @@ async function loadMeta() {
     setStatus({ error: error.message });
     return;
   }
+  renderCompanyOptions();
   metaStatus.replaceChildren(
     makeStatusDot(state.meta.tushare_ready ? "Tushare 就绪" : "Tushare 未配置", state.meta.tushare_ready),
     makeStatusDot(state.meta.feishu_ready ? "飞书就绪" : "飞书未配置", state.meta.feishu_ready),
@@ -1203,7 +1235,31 @@ async function showEvidence(card, finding) {
 }
 
 async function showAgentReference(reference) {
-  evidenceContent.textContent = JSON.stringify(reference, null, 2);
+  const formatter = window.TradeEyeAgentPanel?.formatAgentReference;
+  if (!formatter) {
+    evidenceContent.textContent = JSON.stringify(reference, null, 2);
+    evidenceDialog.showModal();
+    return;
+  }
+  const formatted = formatter(reference);
+  const wrap = document.createElement("div");
+  wrap.className = "evidence-card";
+  const grid = document.createElement("dl");
+  grid.className = "evidence-card__grid";
+  for (const row of formatted.rows) {
+    const item = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = row.label;
+    const value = document.createElement("dd");
+    value.textContent = row.value;
+    item.append(term, value);
+    grid.append(item);
+  }
+  const raw = document.createElement("pre");
+  raw.className = "preview-text evidence-card__raw";
+  raw.textContent = formatted.raw;
+  wrap.append(grid, raw);
+  evidenceContent.replaceChildren(wrap);
   evidenceDialog.showModal();
 }
 
@@ -1230,7 +1286,7 @@ function initAgentPanel() {
   state.agentPanel = panel;
   state.agent = chat;
   if (!state.meta.agent_ready) {
-    panel.setDisabled(true, "Agent 未配置 LLM");
+    panel.setDisabled(true, window.TradeEyeAgentPanel.agentDisabledGuidance);
   }
 }
 
@@ -1302,9 +1358,14 @@ scanButton.addEventListener("click", () => {
 });
 
 el("analyze-company").addEventListener("click", () => {
-  const tsCode = el("company-ts-code").value.trim();
+  const resolved = resolveCompanyInput(el("company-ts-code").value);
+  if (!resolved) {
+    notify("请输入覆盖池内的股票代码或公司名称", true);
+    return;
+  }
   const period = el("company-period").value;
-  navigate(`#/company/${tsCode}/${period}`);
+  el("company-ts-code").value = resolved;
+  navigate(`#/company/${resolved}/${period}`);
 });
 
 el("preview-feishu").addEventListener("click", previewFeishu);

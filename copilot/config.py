@@ -84,7 +84,7 @@ def load_settings(path: str | Path = "config.yaml", env_path: str | Path = ".env
     config_path = Path(path)
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     data.setdefault("tushare", {})["token"] = os.getenv("TUSHARE_TOKEN")
-    data.setdefault("llm", {})["api_key"] = os.getenv("ASCEND_API_KEY")
+    data.setdefault("llm", {})["api_key"] = os.getenv("LLM_API_KEY")
     data.setdefault("notify", {})["feishu_webhook"] = os.getenv("FEISHU_WEBHOOK")
     data.setdefault("notify", {})["feishu_verification_token"] = os.getenv("FEISHU_VERIFICATION_TOKEN")
     data.setdefault("notify", {})["public_base_url"] = os.getenv("PUBLIC_BASE_URL")

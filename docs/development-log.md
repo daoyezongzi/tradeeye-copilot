@@ -1,5 +1,7 @@
 # TradeEye Copilot 开发日志
 
+> 当前状态说明：2026-08-02 已将研究员前端的复核页面、复核标注 chip、复核 CSV 导出与 precision 展示移除；旧日志中提到的 review 前端属于历史记录，当前 review/eval 能力仅作为后端内部评估保留。外部 LLM 配置统一使用 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`，可指向任意 OpenAI-compatible 服务。
+
 ## 2026-08-02
 
 ### 阶段归档：Agent 前端与导航收口合入 main

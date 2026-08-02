@@ -169,7 +169,9 @@ cp .env.example .env
 
 ```bash
 TUSHARE_TOKEN=...
-ASCEND_API_KEY=...            # 可选
+LLM_API_KEY=...              # 可选，OpenAI 兼容 LLM API Key
+LLM_BASE_URL=...             # 可选，OpenAI 兼容端点（如 DeepSeek / Ascend / 其他兼容服务）
+LLM_MODEL=...                # 可选，模型名
 FEISHU_WEBHOOK=...            # 可选
 AUTOMATION_TRIGGER_TOKEN=...  # 可选，cron 接口需要
 FEISHU_VERIFICATION_TOKEN=... # 可选，卡片 callback 需要
@@ -254,7 +256,9 @@ pytest -q
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
 | `TUSHARE_TOKEN` | 是 | Tushare 数据访问 Token |
-| `ASCEND_API_KEY` | 否 | 外部 LLM API 密钥（语气对比） |
+| `LLM_API_KEY` | 否 | OpenAI 兼容外部 LLM API Key（Agent 问答与语气对比） |
+| `LLM_BASE_URL` | 否 | OpenAI 兼容端点（环境变量优先于 `config.yaml`） |
+| `LLM_MODEL` | 否 | OpenAI 兼容模型名（环境变量优先于 `config.yaml`） |
 | `FEISHU_WEBHOOK` | 否 | 飞书自定义机器人 webhook（群推送） |
 | `AUTOMATION_TRIGGER_TOKEN` | 否 | cron 自动化接口的访问令牌 |
 | `FEISHU_VERIFICATION_TOKEN` | 否 | 飞书卡片回调校验令牌 |
@@ -343,7 +347,7 @@ npm test
 node --check web/app.js && node --check web/agent-chat.js && node --check web/agent-panel.js
 ```
 
-当前主分支验证规模：236 个 pytest、15 个 Node 前端测试。套件覆盖 API 路由、规则算术、披露扫描 bundle、job store 持久化/续扫、飞书渲染与分段、复核存储与内部评估指标、配置校验、覆盖池校验、前端产品化契约、Agent panel/chat 纯逻辑。
+当前主分支验证规模：238 个 pytest、18 个 Node 前端测试。套件覆盖 API 路由、规则算术、披露扫描 bundle、job store 持久化/续扫、飞书渲染与分段、复核存储与内部评估指标、配置校验、覆盖池校验、前端产品化契约、Agent panel/chat 纯逻辑。
 
 ## 合规边界
 

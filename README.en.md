@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-teal.svg)](https://fastapi.tiangolo.com/)
 
-**TradeEye Copilot** is an A-share (China) earnings-disclosure anomaly copilot for buy-side research analysts. When a company's quarterly report lands, it outputs **structured financial facts**, **rule-driven anomaly findings**, **traceable evidence**, **attribution summaries**, and **market context** — not another summary to read.
+**TradeEye Copilot** is an A-share earnings-disclosure triage system for buy-side researchers (PMs / analysts). After earnings reports are disclosed, it outputs **structured financial facts**, **rule-driven anomaly findings**, **traceable evidence**, **attribution summaries**, and **market context** — not another long report summary to read.
 
 > [简体中文](README.md) | English
 
@@ -11,7 +11,7 @@
 
 ## Table of Contents
 
-- [What is TradeEye Copilot?](#what-is-tradeeye-copilot)
+- [What is this?](#what-is-this)
 - [Why this design](#why-this-design)
 - [Core design principles](#core-design-principles)
 - [Features](#features)
@@ -33,45 +33,45 @@
 
 ---
 
-## What is TradeEye Copilot?
+## What is this?
 
-TradeEye Copilot is a lightweight collaborative research assistant purpose-built for buy-side institutions (PMs and analysts). During disclosure season, analysts do not lack earnings summaries — they lack **prioritization** and **reproducible anomaly detection**.
+TradeEye Copilot is a lightweight collaborative research assistant purpose-built for buy-side institutions. During disclosure peaks, researchers do not lack earnings summaries; they lack **prioritization** and **reproducible anomaly detection**.
 
-The project reframes the core problem from *"summarize the earnings report"* to *"find the questions worth asking."*
+The project reframes the core task from “summarize the earnings report” to “**find the questions worth asking**”.
 
 The system covers a configurable watchlist (default: **100 A-share companies**), scans disclosure calendar events every working day, runs deterministic financial checks, and delivers:
 
-- A **daily briefing** ranking companies by anomaly severity
-- **Company research cards** with four layers: facts → anomalies → attribution → market context
-- **Evidence drill-down** — every finding carries `Evidence(source, field, period, value)`
-- **Quarterly review** of coverage, rule hits, and human-review precision
-- **Feishu push** of a formal disclosure summary to a group chat
+- **Daily briefing**: full coverage view sorted by anomaly severity
+- **Company research card**: facts → anomalies → attribution → market context
+- **Evidence traceability**: every finding carries `Evidence(source, field, period, value)` and can drill down to source values
+- **Quarterly recap**: coverage pool, disclosed count, hit count, and rule distribution
+- **Feishu push**: formal disclosure summary text to group chats
 
 ## Why this design
 
 | Problem | TradeEye Copilot's answer |
 | --- | --- |
-| LLM hallucinates numbers in serious financial contexts | **LLM never touches arithmetic.** Financial figures come from Tushare + pandas and pass script-level hard checks; the LLM only judges wording and writes attribution |
-| Multi-agent negotiation is slow and token-hungry | **Single-pass analysis**: one scan produces both the daily summary and the scan result — Feishu/Web never re-request Tushare |
-| Chatbot prompts block non-technical users | **Zero-prompt GUI**: a Web workbench with one-click scan, in-place refresh, and Feishu card push; an Agent question bar is reserved as a future interface |
-| Hard-check failures silently degrade quality | **Hard gate**: incomplete data or failed cross-validation blocks the research card instead of emitting a fake "no issue" verdict |
+| LLMs hallucinate numbers in serious financial workflows | **LLM never touches arithmetic.** Financial numbers come from Tushare + pandas and are hard-checked by scripts; LLM is only used for wording comparison and textual attribution |
+| Multi-agent dynamic negotiation is slow and token-heavy | **Single-pass analysis**: one scan produces both the daily briefing and scan results; Feishu/Web do not re-request Tushare |
+| Chatbot prompts create friction for analysts | **Zero-prompt main path + optional Agent**: the Web workbench supports one-click scans and in-place refresh; the Agent floating layer answers questions about the current card and asks for analyst confirmation before refetch/rescan actions |
+| Hard-check failures silently degrade quality | **Hard gate**: incomplete data or failed cross-validation blocks the research card instead of fabricating a “no anomaly” conclusion |
 
 ## Core design principles
 
-1. **Deterministic pipeline first.** All core financial metrics are extracted and cross-validated by deterministic code. Accuracy does not depend on model luck.
-2. **Evidence over assertion.** Every anomaly finding is bound to `Evidence(source, field, period, value)` and exposed in the UI for drill-down.
-3. **Single analysis pass.** Disclosure-day analysis is aggregated once; downstream consumers (Web, Feishu, automation) reuse the result.
-4. **Resumable, cancellable scans.** Disclosure scans are job-based and persisted in SQLite — partial runs can be resumed with `skip_ts_codes`, and cancellation is a safe stop between companies.
-5. **Banking-aware rules.** Banks take a minimal hard-check branch (no fabricated industry rules) — coverage without hallucinated domain logic.
+1. **Deterministic pipeline first.** All core financial metrics are extracted and cross-checked by deterministic code; accuracy does not depend on model luck.
+2. **Evidence over assertions.** Every anomaly finding is bound to `Evidence(source, field, period, value)`, and the UI can drill down into it.
+3. **Single analysis pass.** Disclosure-day analysis is aggregated once; Web / Feishu / automation all reuse the same result.
+4. **Resumable and cancellable scans.** Disclosure scans are job-based and persisted in SQLite; partial runs can resume via `skip_ts_codes`, and cancellation stops safely between companies/tables.
+5. **Bank-aware rules.** Banks use a minimal hard-check branch instead of fabricated industry logic.
 6. **Facts are the only interface.** `CompanyCard.facts` is the single fact interface for Agent interaction; agents never compute financial numbers (see [Agent fact contract](#agent-fact-contract)).
 
 ## Features
 
 ### Disclosure scanning
-- Triggered by the **Tushare disclosure calendar**; optional RSS feed acts as a trigger hint (`copilot/rss/announcements.py` filters earnings titles, marks `DATA_PENDING` when Tushare is not ready)
-- Pulls three periods (current, previous quarter, year-ago) of four statements (income / balance sheet / cash flow / financial indicators) per company
-- **SQLite persistence** for snapshots, jobs, review labels, and notification logs
-- **Job store with resume**: `POST /api/disclosure-day/jobs`, `resume_from_job_id`, owner isolation via `X-TradeEye-Owner`, frontend 1-second polling
+- Triggered by the **Tushare disclosure calendar**; optional RSS feed acts as a trigger hint (`copilot/rss/announcements.py` filters earnings titles and marks `DATA_PENDING` when Tushare data is not ready)
+- Pulls three periods (current / previous quarter / year-ago) across four tables (income statement / balance sheet / cash flow / financial indicators)
+- **SQLite persistence**: snapshots, jobs, review labels, notification logs
+- **Resumable job store**: `POST /api/disclosure-day/jobs`, `resume_from_job_id`, `X-TradeEye-Owner` isolation, frontend 1-second polling
 
 ### Rule engine (deterministic arithmetic)
 Six arithmetic rules with thresholds from `config.yaml` (`rules.thresholds`):
@@ -81,61 +81,62 @@ Six arithmetic rules with thresholds from `config.yaml` (`rules.thresholds`):
 | Receivable divergence | Receivable growth vs. revenue growth gap ≥ 30 pp |
 | Inventory divergence | Inventory growth vs. revenue growth gap ≥ 30 pp |
 | Cash-flow quality | Operating cash flow / net profit < 50% |
-| Gross-margin change | |Δ gross margin| ≥ 5 pp |
-| Profit/revenue direction divergence | Net profit and revenue trend in opposite directions |
-| Non-recurring profit share | Non-recurring profit ≥ 30% of net profit |
+| Gross-margin movement | \|gross margin change\| ≥ 5 pp |
+| Profit/revenue direction divergence | Net profit and revenue move in opposite directions |
+| Non-recurring profit share | Non-recurring profit / net profit ≥ 30% |
 
-Plus a **management-tone finding** (`management_tone_weakened`, YELLOW) produced by the LLM comparing year-on-year wording of the PDF management discussion.
+Plus a **management tone weakened** finding (`management_tone_weakened`, YELLOW): the LLM compares the PDF management discussion section against the year-ago period.
 
 ### Research workbench (Web)
 - **Daily briefing** — header, lead-in, severity distribution bar (red / yellow / OK / data issues)
-- **Company research cards** — expandable; highest-severity card expanded by default
-- **Evidence drill-down popup** — per finding, showing the raw `Evidence` payload
-- **Review queue** — label findings TRUE/FALSE, persisted in the backend (`ts_code/period/rule_id` primary key)
-- **Quarterly review** — coverage pool, hits, rule distribution, human-review precision breakdowns (overall / by rule / by severity / by industry)
-- **Diagnostics & developer tools** — collapsed fold with scan status, jobs, and meta endpoints
+- **Company research cards** — name-first display, code and report period as auxiliary identifiers; expandable with the highest-severity card expanded by default
+- **Single-company analysis** — enter a stock code or company name and report period to generate one company card
+- **Agent floating layer** — bottom-right robot entry, docked right by default, draggable/snap-back; answers questions about the current card and suggests refetch/rescan actions only after confirmation
+- **Evidence drill-down popup** — per finding, showing the original `Evidence` payload
+- **Quarterly recap** — coverage pool, disclosed count, hit count, and rule distribution; human-review metrics stay in backend evaluation APIs, not in the analyst main path
+- **Diagnostics & developer tools** — collapsed fold with scan status, jobs, automation integration, and notification logs
 - **Export** — JSON / CSV menus; deep links `#/day/{date}`, `#/company/{ts_code}/{period}`
 
 ### Feishu notifications
-- Formal disclosure summary text (overview + all red/yellow anomalies + data issues; "no anomaly" companies counted only)
+- Formal disclosure summary text (overview + all red/yellow anomalies + data issues; “no anomaly” companies counted only)
 - **Long-text segmentation** (`split_feishu_text`, 3500 chars/segment with `[i/n]` headers)
-- Idempotent de-duplication per date, **send logs**, **preview** and **manual resend** endpoints
-- Interactive card **callback** endpoint with challenge/verification-token checks (no public inbound webhook required)
+- Idempotent de-duplication per date, send logs, preview, and manual resend APIs
+- Interactive card **callback** endpoint with challenge / verification token checks, no public inbound webhook required
 
 ### Automation
-- `POST /api/automation/disclosure-day/cron` guarded by `X-Automation-Token` (`AUTOMATION_TRIGGER_TOKEN`)
-- GitHub Actions workflow `disclosure-automation.yml`: cron `"30 10 * * 1-5"` (10:30 UTC on weekdays) + `workflow_dispatch` with date/notify inputs
+- `POST /api/automation/disclosure-day/cron`, protected by `X-Automation-Token` (`AUTOMATION_TRIGGER_TOKEN`)
+- GitHub Actions workflow `disclosure-automation.yml`: cron `"30 10 * * 1-5"` (weekdays 10:30 UTC) + `workflow_dispatch` (`date` / `notify` inputs)
 
 ## Architecture
 
 ```text
-Disclosure calendar -> Context assembly -> Hard validation -> Rule engine -> Report orchestration -> Web / Feishu
-                                          \-> PDF extraction -> LLM tone comparison / attribution
+Disclosure calendar -> Context assembly -> Hard checks -> Rule engine -> Report orchestration -> Web / Feishu
+                                      \-> PDF extraction -> LLM tone comparison / attribution
 ```
 
-- **Deterministic pipeline**: Tushare → pandas → SQLite → hard check → rules. Numbers never pass through an LLM.
-- **Narrative module**: extracts the management-discussion section from PDFs, then uses an OpenAI-compatible LLM (temperature 0.0) to compare wording vs. the prior period and emit a strict-JSON tone finding bound to the PDF section as evidence.
-- **API layer**: one `create_app()` factory shared by `real_app` (production, real services) — demo data app was removed.
-- **Frontend**: dependency-free vanilla JS workbench (`web/`) served by FastAPI static mounts, no build step.
+- **Deterministic pipeline**: Tushare → pandas → SQLite → hard checks → rules. Numbers never pass through an LLM.
+- **Narrative module**: extracts management-discussion sections from PDFs, uses an OpenAI-compatible LLM (temperature 0.0) to compare wording vs. year-ago text, and emits strict-JSON tone findings with PDF-section evidence.
+- **API layer**: `create_app()` factory, used by `real_app` (production app with real services); demo data app has been removed.
+- **Frontend**: dependency-free vanilla JS workbench (`web/`) mounted by FastAPI, no build step.
 
 ### Module layout
 
 ```text
 copilot/
-├── api/            # FastAPI app: real_app.py (production), app.py (create_app factory)
+├── api/            # FastAPI: real_app.py (production entry), app.py (create_app factory)
 ├── checks/         # reconcile: cross-validation / hard checks
 ├── datasource/     # tushare_client, calendar, fundamentals
 ├── eval/           # backtest summary, real_backtest, manual review precision
-├── llm/            # OpenAI-compatible client, failure degrades to None
+├── llm/            # OpenAI-compatible client, failures degrade to None
 ├── narrative/      # PDF extraction + tone comparison
 ├── notify/         # Feishu rendering, long-text splitting
-├── report/         # company card / quarterly review builders
-├── rss/            # announcements trigger hint + polling service
+├── report/         # company research card / quarterly recap builders
+├── rss/            # announcement trigger hint + polling service
 ├── rules/          # arithmetic rule engine: base, divergence, caliber, registry
-├── service/        # analyzer, disclosure_scan (single-pass bundle), disclosure_jobs, review_store, notify_store
+├── service/        # analyzer, disclosure_scan, disclosure_jobs, review_store, notify_store
 ├── store/          # SQLite store
 ├── scheduler.py    # automation cron trigger handler
-├── watchlist.py    # coverage pool YAML validation (code + name + industry)
+├── watchlist.py    # coverage YAML validation (code + name + industry)
 └── models.py       # pydantic models: Context, Evidence, Finding, PeriodSnapshot, ...
 ```
 
@@ -144,9 +145,9 @@ copilot/
 ### Prerequisites
 
 - Python **≥ 3.11**
-- A [Tushare](https://tushare.pro/) token (financial data)
-- *(Optional)* An OpenAI-compatible LLM endpoint (narrative tone findings)
-- *(Optional)* A Feishu custom-bot webhook (group push)
+- [Tushare](https://tushare.pro/) token (financial data)
+- *(Optional)* OpenAI-compatible LLM endpoint (Agent Q&A and tone findings)
+- *(Optional)* Feishu custom-bot webhook (group push)
 
 ### Install
 
@@ -164,34 +165,36 @@ pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-Then fill in the secrets (see [Configuration reference](#configuration-reference)):
+Fill in secrets (see [Configuration reference](#configuration-reference)):
 
 ```bash
 TUSHARE_TOKEN=...
-ASCEND_API_KEY=...          # optional
-FEISHU_WEBHOOK=...          # optional
-AUTOMATION_TRIGGER_TOKEN=...  # optional, required for cron endpoint
-FEISHU_VERIFICATION_TOKEN=... # optional, for card callback
-PUBLIC_BASE_URL=...         # optional, public URL of the deployed app
+LLM_API_KEY=...              # optional, OpenAI-compatible LLM API key
+LLM_BASE_URL=...             # optional, OpenAI-compatible endpoint such as DeepSeek / Ascend / another compatible provider
+LLM_MODEL=...                # optional, model name
+FEISHU_WEBHOOK=...           # optional
+AUTOMATION_TRIGGER_TOKEN=... # optional, required by cron endpoint
+FEISHU_VERIFICATION_TOKEN=...# optional, for card callback
+PUBLIC_BASE_URL=...          # optional, public URL of deployed app
 ```
 
-Non-secret settings live in `config.yaml`: coverage pool (100 companies), company names, industry routing, rule thresholds, LLM endpoint, PDF cache, eval window.
+Non-secret settings live in `config.yaml`: coverage pool (100 companies), company names, industry routing, rule thresholds, LLM defaults, PDF cache, and evaluation window.
 
 ### Run
 
-**Windows (one click):**
+**Windows one-click start:**
 
 ```bat
 start_real.bat
 ```
 
-It installs deps, opens `http://127.0.0.1:8000/`, and starts:
+The script installs dependencies, opens `http://127.0.0.1:8000/`, and starts:
 
 ```bash
 python -m uvicorn copilot.api.real_app:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open the dashboard and click `依据` (Evidence) on any finding to inspect the raw evidence JSON.
+After opening the workbench, click `依据` on any finding to inspect source evidence JSON.
 
 ### Verify
 
@@ -201,50 +204,50 @@ pytest -q
 
 ## Usage
 
-### Analyst workflow (dashboard)
+### Analyst workflow (workbench)
 
-1. Open `http://127.0.0.1:8000/` — the workbench shows the disclosure-day view.
-2. Pick a disclosure date and click **Start scan** (you can stop / cancel / resume — partial jobs are persisted).
-3. The **daily briefing** shows a severity distribution bar (red / yellow / OK / data issues).
-4. Click a company row to open its **research card** (facts → anomalies → attribution → market context).
-5. Click `依据` (Evidence) on any finding for the **evidence drill-down popup** with the exact source values.
-6. Label findings as TRUE / FALSE in the review queue — labels are stored in the backend and feed precision metrics.
-7. Click **Preview Feishu summary** to review the message, then **Send** (button disabled until a webhook is configured).
+1. Open `http://127.0.0.1:8000/` and enter the disclosure-day view.
+2. Select a disclosure date and click **Start scan** (stop / cancel / resume are supported; partial jobs are persisted).
+3. The **daily briefing** shows the severity distribution bar (red / yellow / OK / data issues).
+4. Click a company row to expand its **research card** (facts → anomalies → attribution → market).
+5. Click `依据` on a finding to open the **evidence drill-down popup** with exact source values.
+6. For follow-up questions, click the bottom-right robot to open the **Agent floating layer**; the Agent answers using the current card and requires confirmation before refetch/rescan actions.
+7. Click **Preview Feishu summary** to review text, then **Send** (disabled unless webhook is configured).
 8. Check **notification logs** for delivery results.
 
-After deployment, the GitHub Actions cron (or any scheduler) calls the [automation endpoint](#automated-scheduling) so the flow runs unattended.
+After deployment, GitHub Actions cron (or any scheduler) can call the [automation endpoint](#automated-scheduling) for unattended runs.
 
 ### API quick tour
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/meta` | App meta / capabilities |
-| `GET` | `/api/daily/{date}` | Daily briefing for a date (`YYYYMMDD`) |
+| `GET` | `/api/meta` | App metadata / capabilities |
+| `GET` | `/api/daily/{date}` | Daily briefing for a disclosure date (`YYYYMMDD`) |
 | `GET` | `/api/company/{ts_code}/{period}` | Company research card |
-| `GET` | `/api/evidence/{ts_code}/{period}/{rule_id}` | Evidence payload for one finding |
-| `GET` | `/api/quarterly` | Quarterly review aggregates |
+| `GET` | `/api/evidence/{ts_code}/{period}/{rule_id}` | Evidence for one finding |
+| `GET` | `/api/quarterly` | Quarterly recap aggregate |
 | `POST` | `/api/analyze/company` | Analyze one company |
-| `POST` | `/api/analyze/disclosure-day` | Analyze a disclosure day (single pass) |
+| `POST` | `/api/analyze/disclosure-day` | Analyze a disclosure day (single-pass aggregation) |
 | `POST` | `/api/scan/disclosure-day` | Scan a disclosure day |
 | `POST` | `/api/disclosure-day/bundle` | Build analysis bundle |
 | `POST` | `/api/disclosure-day/jobs` | Start a resumable scan job |
 | `GET` | `/api/disclosure-day/jobs` | List jobs |
-| `GET` | `/api/disclosure-day/jobs/{job_id}` | Job status |
-| `POST` | `/api/disclosure-day/jobs/{job_id}/cancel` | Cancel a job (safe stop) |
+| `GET` | `/api/disclosure-day/jobs/{job_id}` | Get job status |
+| `POST` | `/api/disclosure-day/jobs/{job_id}/cancel` | Cancel job (safe stop) |
 | `DELETE` | `/api/disclosure-day/jobs?keep_recent=N` | Clean up old jobs |
-| `GET` | `/api/reviews/labels.csv` | Review labels as CSV |
-| `GET` | `/api/reviews/metrics` | Precision breakdowns |
-| `POST` / `GET` | `/api/reviews/labels` | Upsert / list review labels |
-| `DELETE` | `/api/reviews/labels/{ts_code}/{period}/{rule_id}` | Delete a label |
+| `GET` | `/api/reviews/labels.csv` | Internal evaluation: review labels as CSV |
+| `GET` | `/api/reviews/metrics` | Internal evaluation: precision breakdowns |
+| `POST` / `GET` | `/api/reviews/labels` | Internal evaluation: upsert / list review labels |
+| `DELETE` | `/api/reviews/labels/{ts_code}/{period}/{rule_id}` | Internal evaluation: delete a label |
 | `POST` | `/api/rss/poll` | Poll RSS feeds (trigger hint) |
 | `GET` | `/api/notify/logs?limit=20` | Notification send logs |
 | `POST` | `/api/notify/feishu/callback` | Feishu interactive card callback |
-| `POST` | `/api/notify/feishu/disclosure-day/{date}/preview` | Preview the summary text |
-| `POST` | `/api/notify/feishu/disclosure-day/{date}` | Send the summary to the webhook |
+| `POST` | `/api/notify/feishu/disclosure-day/{date}/preview` | Preview summary text |
+| `POST` | `/api/notify/feishu/disclosure-day/{date}` | Send summary to webhook |
 | `POST` | `/api/automation/disclosure-day` | Automation trigger (no token) |
 | `POST` | `/api/automation/disclosure-day/cron` | Automation trigger (requires `X-Automation-Token`) |
 
-The FastAPI interactive docs are available at `http://127.0.0.1:8000/docs` when running with `--reload` (or via the OpenAPI schema).
+Interactive FastAPI docs are available at `http://127.0.0.1:8000/docs` when running locally.
 
 ## Configuration reference
 
@@ -253,13 +256,15 @@ The FastAPI interactive docs are available at `http://127.0.0.1:8000/docs` when 
 | Variable | Required | Description |
 | --- | --- | --- |
 | `TUSHARE_TOKEN` | Yes | Tushare data access token |
-| `ASCEND_API_KEY` | No | External LLM API key (narrative tone) |
+| `LLM_API_KEY` | No | OpenAI-compatible external LLM API key (Agent Q&A and tone comparison) |
+| `LLM_BASE_URL` | No | OpenAI-compatible endpoint; environment variable overrides `config.yaml` |
+| `LLM_MODEL` | No | OpenAI-compatible model name; environment variable overrides `config.yaml` |
 | `FEISHU_WEBHOOK` | No | Feishu custom-bot webhook URL (group push) |
-| `AUTOMATION_TRIGGER_TOKEN` | No | Token required by the cron automation endpoint |
+| `AUTOMATION_TRIGGER_TOKEN` | No | Access token for cron automation endpoint |
 | `FEISHU_VERIFICATION_TOKEN` | No | Verification token for Feishu card callback |
-| `PUBLIC_BASE_URL` | No | Public base URL used in card detail links (`notify.public_base_url`) |
+| `PUBLIC_BASE_URL` | No | Public base URL for card detail links (`notify.public_base_url`) |
 
-`.env` is auto-loaded and environment variables take precedence; secrets are validated for presence only, never printed.
+`.env` is loaded automatically and environment variables take precedence; secrets are only checked for presence and are never printed.
 
 ### config.yaml sections
 
@@ -267,57 +272,58 @@ The FastAPI interactive docs are available at `http://127.0.0.1:8000/docs` when 
 | --- | --- |
 | `database` | SQLite path (default `data/tradeeye_copilot.sqlite`) |
 | `tushare` | Timeout / retry settings |
-| `llm` | `base_url`, `model`, `timeout_seconds` for the OpenAI-compatible endpoint |
-| `narrative` | PDF cache dir, max section chars |
+| `llm` | Default `base_url`, `model`, and `timeout_seconds` for OpenAI-compatible endpoints |
+| `narrative` | PDF cache directory and max section characters |
 | `notify` | `feishu_enabled` flag |
-| `eval` | `coverage_pool` (100 codes), `company_names`, `company_industries`, benchmark window & output path |
-| `rss` | Feed list, `max_entries` |
-| `rules.thresholds` | Thresholds for the six arithmetic rules |
+| `eval` | `coverage_pool` (100 codes), `company_names`, `company_industries`, benchmark window and output path |
+| `rss` | Feed list and `max_entries` |
+| `rules.thresholds` | Six arithmetic rule thresholds |
 
 ## Rule engine
 
-Rules are **pure arithmetic functions** in `copilot/rules/` (`divergence.py`, `caliber.py`, `base.py`) — no LLM involved. Thresholds are configured in `config.yaml`; missing data yields `DATA_INCOMPLETE` / `NOT_EVALUATED` states instead of fake "no issue" verdicts. Banks route through a minimal hard-check branch (receivable / inventory / gross-margin rules exempted) — no fabricated industry logic.
+Rules are **pure arithmetic functions** in `copilot/rules/` (`divergence.py`, `caliber.py`, `base.py`) and do not involve LLMs. Thresholds are configured in `config.yaml`; missing data yields `DATA_INCOMPLETE` / `NOT_EVALUATED` states and never fabricates “no anomaly”. Banks use a minimal hard-check branch (receivable / inventory / gross-margin rules exempted) without invented industry logic.
 
 ## Feishu notifications
 
 - Rendered by `copilot/notify/feishu.py` (`render_formal_disclosure_text`)
-- Long messages are split into 3500-char segments with `[i/n]` headers
-- One message per date (idempotent), send logs stored in SQLite, manual resend supported
-- Interactive card callback endpoint verifies the verification token (challenge-style); no public inbound webhook is needed
+- Long messages split into 3500-character segments with `[i/n]` headers
+- Idempotent per date, send logs stored in SQLite, preview and manual resend APIs
+- Interactive card callback endpoint verifies the verification token (challenge-style), no public inbound webhook required
 
 ## Automated scheduling
 
 - GitHub Actions: `.github/workflows/disclosure-automation.yml`
-  - cron `"30 10 * * 1-5"` (10:30 UTC, weekdays)
-  - `workflow_dispatch` with `date` and `notify` inputs
-  - Requires secrets `TRADEEYE_API_BASE_URL` and `AUTOMATION_TRIGGER_TOKEN`
-- The workflow POSTs to `/api/automation/disclosure-day/cron` with `X-Automation-Token`; `copilot/scheduler.py` dispatches the disclosure-day automation with optional Feishu notify.
+  - cron `"30 10 * * 1-5"` (weekdays 10:30 UTC)
+  - `workflow_dispatch` supports `date` and `notify` inputs
+  - Requires Secrets `TRADEEYE_API_BASE_URL` and `AUTOMATION_TRIGGER_TOKEN`
+- The workflow posts to `/api/automation/disclosure-day/cron` with `X-Automation-Token`; `copilot/scheduler.py` dispatches disclosure-day automation and optional Feishu notification.
 
 ## LLM usage (external LLM API)
 
-- `copilot/llm/client.py` — OpenAI-compatible client; on failure returns `None` and the pipeline degrades gracefully
-- `copilot/narrative/extract.py` — extracts the management-discussion section from PDFs (cached in `narrative.pdf_cache_dir`)
-- `copilot/narrative/tone.py` — temperature **0.0**, strict-JSON output, compares current vs. year-ago wording → `management_tone_weakened` finding with the PDF section as evidence
-- **Guardrails**: the LLM never computes numbers; rules and hard checks are LLM-free; attribution is an *additional* finding, never a replacement for rule evidence.
+- `copilot/llm/client.py` — OpenAI-compatible client; failures return `None` and the pipeline degrades gracefully
+- `copilot/narrative/extract.py` — extracts management discussion from PDFs (cached under `narrative.pdf_cache_dir`)
+- `copilot/narrative/tone.py` — temperature **0.0**, strict JSON output, compares current vs. year-ago wording → `management_tone_weakened` finding with PDF-section evidence
+- **Guardrails**: LLM never computes numbers; rules and hard checks contain no LLM; attribution is an additional finding and never replaces rule evidence
 
 ## Agent fact contract
 
-The system reserves a headless-Agent question bar (Agent interface endpoints are defined; the Web UI reuses the current workbench). The contract (spec: [2026-08-01 agent fact contract design](docs/superpowers/specs/2026-08-01-agent-fact-contract-design.md)):
+The Agent is integrated into the analyst frontend as a floating Q&A layer rather than a primary navigation page. The contract (spec: [2026-08-01 Agent fact contract design](docs/superpowers/specs/2026-08-01-agent-fact-contract-design.md), [2026-08-02 Agent frontend design](docs/superpowers/specs/2026-08-02-agent-frontend-design.md)):
 
-- **`CompanyCard.facts` is the single fact interface** — agents must not derive numbers from rendered text
-- `Fact` states: `VERIFIED` (requires value + evidence, period/value consistency checked) / `UNAVAILABLE` / `INVALID` / `NOT_APPLICABLE`
+- **`CompanyCard.facts` is the single fact interface** — Agent must not derive numbers from rendered text
+- `Fact` states: `VERIFIED` (requires value + evidence and period/value consistency) / `UNAVAILABLE` / `INVALID` / `NOT_APPLICABLE`
 - Every fact carries `FactEvidence(evidence_id, source, field, period, value)` for traceability
 - `RuleResultStatus`: `HIT` / `MISS` / `NOT_EVALUATED` / `BLOCKED` — insufficient data must not masquerade as `MISS`
 - `CardStatus`: `OK` / `PARTIAL` / `BLOCKED` (partial blocking)
 - Agent answers never override `facts` / `findings` / `rule_results`
+- The Agent suggests only `refetch_company` / `rescan_disclosure_day`; the frontend executes existing analysis APIs only after confirmation, and the Agent itself writes no business data
 
 ## Evaluation & benchmark
 
-- `eval/run_backtest.py` — deterministic benchmark scaffold; writes `artifacts/benchmark.json` (not committed)
-- `copilot/eval/real_backtest.py` — multi-day scan aggregation (`summarize_scan_counts`, failure grouping by status/industry/message)
-- `copilot/eval/manual_review.py` — `compute_precision_breakdown()`: overall / by rule / by severity / by industry; only TRUE/FALSE labels count, `UNREVIEWED` excluded
-- `eval/manual_review_template.csv` — template for human review (`ts_code, period, rule_id, label, notes, severity, industry`)
-- Review labels feed back through `/api/reviews/*`
+- `eval/run_backtest.py` — deterministic benchmark scaffold, outputs `artifacts/benchmark.json`
+- `copilot/eval/real_backtest.py` — multi-day scan aggregation (`summarize_scan_counts`, failures grouped by status/industry/message)
+- `copilot/eval/manual_review.py` — `compute_precision_breakdown()`: overall / by rule / by severity / by industry; only TRUE/FALSE labels count, `UNREVIEWED` is excluded
+- `eval/manual_review_template.csv` — manual review template (`ts_code, period, rule_id, label, notes, severity, industry`)
+- Review labels and precision remain available through `/api/reviews/*` for internal evaluation; they are not shown in the analyst frontend main path
 
 ## Project structure
 
@@ -325,8 +331,8 @@ The system reserves a headless-Agent question bar (Agent interface endpoints are
 .
 ├── copilot/          # Backend package (API, services, rules, store, notify)
 ├── web/              # Vanilla JS frontend workbench (index.html, app.js, components.js, styles.css)
-├── eval/             # Benchmark / manual review tooling
-├── tests/            # pytest suite (180+ tests)
+├── eval/             # Benchmark / manual review tools
+├── tests/            # pytest + Node frontend tests (238 pytest, 18 Node tests)
 ├── config.yaml       # Non-secret configuration
 ├── start_real.bat    # One-click local startup (production app)
 ├── .github/workflows/disclosure-automation.yml
@@ -336,19 +342,21 @@ The system reserves a headless-Agent question bar (Agent interface endpoints are
 ## Testing
 
 ```bash
-pytest -q
+python -m pytest --basetemp=.pytest_tmp -q
+npm test
+node --check web/app.js && node --check web/agent-chat.js && node --check web/agent-panel.js
 ```
 
-The suite covers API routes, rule arithmetic, disclosure scan bundles, job store persistence/resume, Feishu rendering & segmentation, review store & metrics, config validation, watchlist validation, and frontend contracts.
+Current main-branch validation scale: 238 pytest and 18 Node frontend tests. The suite covers API routes, rule arithmetic, disclosure scan bundles, job store persistence/resume, Feishu rendering and segmentation, review storage and internal evaluation metrics, configuration validation, coverage-pool validation, frontend productization contracts, and Agent panel/chat pure logic.
 
 ## Compliance boundary
 
-TradeEye Copilot only presents facts, rule-triggered anomalies, source evidence, and market-reaction context. It does **not** output investment advice, target prices, or buy/sell/hold recommendations.
+TradeEye Copilot only presents facts, rule-triggered anomalies, source evidence, and market-reaction context. It does **not** output investment advice, target prices, or buy/sell ratings.
 
 ## Related projects
 
 - [daoyezongzi/TradeEye](https://github.com/daoyezongzi/TradeEye) — data acquisition, perception pipeline, and Feishu push mechanism
-- [daoyezongzi/PlatoAcademy](https://github.com/daoyezongzi/PlatoAcademy) — headless Skill-Agent orchestration, RAG retrieval, and inference (interaction reference)
+- [daoyezongzi/PlatoAcademy](https://github.com/daoyezongzi/PlatoAcademy) — headless Skill Agent orchestration, RAG retrieval, and inference (interaction reference)
 
 ## Docs & references
 

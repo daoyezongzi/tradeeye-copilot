@@ -163,8 +163,10 @@
             </div>
             <div class="button-row">
               <div class="field">
-                <label for="company-ts-code">股票代码</label>
-                <input id="company-ts-code" type="text" value="603026.SH" placeholder="000001.SZ" />
+                <label for="company-ts-code">股票代码 / 公司名称</label>
+                <input id="company-ts-code" type="text" value="603026.SH" placeholder="603026.SH 或 石大胜华" list="company-ts-code-options" />
+                <datalist id="company-ts-code-options"></datalist>
+                <small class="field__hint">支持覆盖池公司名候选，提交时仍使用股票代码</small>
               </div>
               <div class="field">
                 <label for="company-period">报告期</label>
@@ -203,7 +205,7 @@
       <button class="text" id="close-dialog" aria-label="关闭">关闭</button>
     </div>
     <div class="dialog__body">
-      <pre id="evidence-content" class="preview-text"></pre>
+      <div id="evidence-content" class="preview-text"></div>
     </div>
     <div class="dialog__foot">
       <p class="dialog__hint">每条 finding 的字段、期间与取值均来自 Tushare 原始快照</p>
