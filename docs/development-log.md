@@ -2,6 +2,39 @@
 
 ## 2026-08-02
 
+### 阶段归档：Agent 前端与导航收口合入 main
+
+本阶段已将 Agent 后端、Agent 前端浮层、导航收口与股票名称优先展示全部合入 `main` 并推送远端；当前远端 `origin/main` 最新提交为 `da08a0c`。
+
+产品路径收口：研究员前端左侧导航只保留「披露日研判」与「单票研判」。`#/review` 不再作为合法前端 view，访问会归一到 `#/workbench`。复核仍作为后端 `/api/reviews/*` 与 eval 内部评估能力保留，但研究员前端不再展示复核队列、标注明细、precision、CSV 导出或卡片标注 chip。
+
+Agent 前端状态：右下角入口已从文字药丸改为小圆机器人按钮；Agent 作为浮层交互，不进入一级导航。面板默认右侧停靠，可拖离并吸附回右侧；按卡分组保留历史，切卡后显式展示新的当前卡。Agent 只建议 `refetch_company` / `rescan_disclosure_day` 动作，前端以确认卡执行既有接口。
+
+股票展示状态：工作台卡片、单票卡片、Agent 上下文、数据问题表与导出链路改为名称优先、代码辅助；底层 URL、API 参数、session key 与 Agent action 参数仍使用 `ts_code` / `period`。
+
+自审结论：
+
+- Agent 工具白名单保持只读；动作建议不是后端写工具。
+- 研究员前端无复核导航、复核表、复核 CSV、标注 chip 或 precision 展示。
+- 后端 reviews/eval 能力未删除，可继续用于内部评估。
+- 主仓 `.env` 未被 git 跟踪；本地仍有未跟踪 `.pytest-review-tmp/`，不属于提交内容。
+
+验证：
+
+```bash
+python -m pytest --basetemp=.pytest_tmp -q
+npm test
+node --check web/app.js && node --check web/agent-chat.js && node --check web/agent-panel.js
+```
+
+结果：
+
+```text
+236 passed
+15 passed
+JavaScript syntax check passed
+```
+
 ### 阶段归档:Agent 前端问答浮层对接
 
 本阶段在 Agent 后端问答接口之上补齐研究员前端人机交互闭环：新增浮层 Agent 面板（默认右侧停靠、可拖离、拖回右缘吸附、右下角药丸入口），按卡分组保留会话历史，顶部显式显示当前答疑对象；换卡新起后端 session，但可见历史不清空。前端复用项目原生 HTML/CSS/JS、现有 token、现有单票分析与披露日 job 轮询，不压缩主区宽度。
@@ -20,7 +53,7 @@
 - Agent 工具白名单保持只读；动作只是回答契约，不是后端写工具。
 - 未加入 slash command、流式输出、停止生成按钮或复核标注类动作。
 - 生产代码无 review-label Agent action；grep 唯一 review-label 命中为既有 CSV 导出提示。
-- 当前实现仍在 `worktree-agent-fact-contract` 工作树，尚未合并到 main；从 main 目录启动看不到 Agent 入口。
+- 本阶段实现时尚在 `worktree-agent-fact-contract` 工作树；后续已合入 main，见上方「Agent 前端与导航收口合入 main」。
 
 验证：
 
@@ -39,10 +72,10 @@ node --check web/agent-chat.js
 12 passed
 ```
 
-后续待办：
+后续待办（已在上方归档完成）：
 
-- 调整右下角 Agent 入口：由文字药丸改为小圆形按钮，图标使用小机器人，降低视觉重量。
-- 评估「复核队列」与「单票研判」导航是否冗余：确认真实使用路径后决定合并、降级或保留。
+- 右下角 Agent 入口已由文字药丸改为小圆形机器人按钮。
+- 「复核队列」已从研究员一级导航与前端曝光中删除；复核能力保留为后端内部评估接口。
 
 ### 阶段归档:Agent 后端问答接口
 

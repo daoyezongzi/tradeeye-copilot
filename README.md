@@ -44,7 +44,7 @@ TradeEye Copilot 是专为买方机构打造的轻量级协同投研助手。披
 - **当日汇总**：按异常严重度排序的公司全量覆盖视图
 - **公司研判卡**：事实 → 异常 → 归因 → 市场四层结构
 - **依据溯源**：每条 finding 携带 `Evidence(source, field, period, value)`，可下钻到原始数值
-- **季度复盘**：覆盖池、规则命中数、人工复核精确率
+- **季度复盘**：覆盖池、披露数、命中数与规则分布
 - **飞书推送**：正式披露摘要文本推送至群聊
 
 ## 为什么这样设计
@@ -53,7 +53,7 @@ TradeEye Copilot 是专为买方机构打造的轻量级协同投研助手。披
 | --- | --- |
 | 严肃金融场景下 LLM 处理数字会幻觉 | **LLM 永不接触算术**。财务数字来自 Tushare + pandas，经脚本级硬校验；LLM 只做措辞判断与文字归因 |
 | 多 Agent 动态协商耗时、耗 token | **单次分析聚合**：一次扫描同时产出当日汇总与扫描结果，飞书/Web 不再重复请求 Tushare |
-| Chatbot 对话框有 Prompt 门槛 | **零 Prompt GUI**：Web 工作台一键扫描、原位刷新，飞书卡片推送；Agent 问答栏作为预留接口 |
+| Chatbot 对话框有 Prompt 门槛 | **零 Prompt 主路径 + 可选 Agent**：Web 工作台一键扫描、原位刷新；Agent 浮层按当前研判卡答疑，并在执行重抓/重扫前要求研究员确认 |
 | 硬校验失败会静默降质 | **硬门禁**：数据不完整或交叉验算失败时阻断研判卡，而不是伪造"未见异常" |
 
 ## 核心设计原则
@@ -89,11 +89,12 @@ TradeEye Copilot 是专为买方机构打造的轻量级协同投研助手。披
 
 ### 研究工作台（Web）
 - **当日汇总**——报头、导语、严重度分布条（红 / 黄 / OK / 数据问题）
-- **公司研判卡**——可展开，默认展开最高分卡片
+- **公司研判卡**——名称优先展示，代码与报告期作为辅助标识；可展开，默认展开最高分卡片
+- **单票研判**——输入股票代码与报告期，直接生成单家公司研判卡
+- **Agent 浮层**——右下角小机器人入口，默认右侧停靠、可拖离/吸附；围绕当前卡片答疑，并可建议单票重抓或披露日重扫，执行前必须确认
 - **依据溯源弹窗**——逐条 finding 展示原始 `Evidence` 数据
-- **复核队列**——标注 TRUE / FALSE，后端持久化（主键 `ts_code/period/rule_id`）
-- **季度复盘**——覆盖池、命中数、规则分布、精确率分解（总体 / 按规则 / 按严重度 / 按行业）
-- **诊断与开发者工具**——折叠区展示扫描状态、job 与 meta 接口
+- **季度复盘**——覆盖池、披露数、命中数与规则分布；复核指标保留在后端评估能力中，不进入研究员前端主路径
+- **诊断与开发者工具**——折叠区展示扫描状态、job、自动化联调与通知日志
 - **导出**——JSON / CSV 菜单；深链 `#/day/{date}`、`#/company/{ts_code}/{period}`
 
 ### 飞书推送
@@ -208,7 +209,7 @@ pytest -q
 3. **当日汇总**展示严重度分布条（红 / 黄 / OK / 数据问题）。
 4. 点击公司行展开**研判卡**（事实 → 异常 → 归因 → 市场）。
 5. 点击任意 finding 的 `依据` 打开**证据溯源弹窗**，查看精确的源数值。
-6. 在复核队列中标注 TRUE / FALSE——标签持久化到后端，并计入精确率指标。
+6. 需要追问时，点击右下角小机器人打开 **Agent 浮层**；Agent 只基于当前卡片事实答疑，涉及重抓/重扫时会给出确认卡。
 7. 点击 **预览飞书摘要** 检查文案，再点击 **发送**（未配置 webhook 时按钮禁用）。
 8. 在**通知日志**中查看投递结果。
 
@@ -232,10 +233,10 @@ pytest -q
 | `GET` | `/api/disclosure-day/jobs/{job_id}` | 查看 job 状态 |
 | `POST` | `/api/disclosure-day/jobs/{job_id}/cancel` | 取消 job（安全停止） |
 | `DELETE` | `/api/disclosure-day/jobs?keep_recent=N` | 清理历史 jobs |
-| `GET` | `/api/reviews/labels.csv` | 复核标签 CSV |
-| `GET` | `/api/reviews/metrics` | 精确率分解 |
-| `POST` / `GET` | `/api/reviews/labels` | 写入 / 列出复核标签 |
-| `DELETE` | `/api/reviews/labels/{ts_code}/{period}/{rule_id}` | 删除标签 |
+| `GET` | `/api/reviews/labels.csv` | 内部评估：复核标签 CSV |
+| `GET` | `/api/reviews/metrics` | 内部评估：precision 分解 |
+| `POST` / `GET` | `/api/reviews/labels` | 内部评估：写入 / 列出复核标签 |
+| `DELETE` | `/api/reviews/labels/{ts_code}/{period}/{rule_id}` | 内部评估：删除标签 |
 | `POST` | `/api/rss/poll` | 轮询 RSS（触发提示） |
 | `GET` | `/api/notify/logs?limit=20` | 通知发送日志 |
 | `POST` | `/api/notify/feishu/callback` | 飞书交互卡片回调 |
@@ -302,7 +303,7 @@ pytest -q
 
 ## Agent 事实契约
 
-系统预留无头 Agent 问答栏（Agent 接口已定义，前端复用现有工作台）。契约核心（spec：[2026-08-01 Agent 事实契约设计](docs/superpowers/specs/2026-08-01-agent-fact-contract-design.md)）：
+Agent 已接入研究员前端，作为悬浮问答层而不是一级导航页。契约核心（spec：[2026-08-01 Agent 事实契约设计](docs/superpowers/specs/2026-08-01-agent-fact-contract-design.md)、[2026-08-02 Agent 前端设计](docs/superpowers/specs/2026-08-02-agent-frontend-design.md)）：
 
 - **`CompanyCard.facts` 是唯一事实接口**——Agent 不得从渲染文本反推数字
 - `Fact` 状态：`VERIFIED`（必须 value + evidence，且 period/value 一致）/ `UNAVAILABLE` / `INVALID` / `NOT_APPLICABLE`
@@ -310,14 +311,15 @@ pytest -q
 - `RuleResultStatus`：`HIT` / `MISS` / `NOT_EVALUATED` / `BLOCKED`——数据不足不得用 `MISS` 冒充未见异常
 - `CardStatus`：`OK` / `PARTIAL` / `BLOCKED`（局部阻断）
 - Agent 回答不得反向覆盖 `facts` / `findings` / `rule_results`
+- Agent 只建议 `refetch_company` / `rescan_disclosure_day` 两类动作；前端以确认卡执行既有分析接口，Agent 自身不写业务数据
 
 ## 评估与基准
 
-- `eval/run_backtest.py` —— 确定性基准脚手架，输出 `artifacts/benchmark.json`（不提交）
+- `eval/run_backtest.py` —— 确定性基准脚手架，输出 `artifacts/benchmark.json`
 - `copilot/eval/real_backtest.py` —— 多日扫描聚合（`summarize_scan_counts`、按 status/industry/message 分组失败）
 - `copilot/eval/manual_review.py` —— `compute_precision_breakdown()`：总体 / 按规则 / 按严重度 / 按行业；只计 TRUE/FALSE，`UNREVIEWED` 不计入
 - `eval/manual_review_template.csv` —— 人工复核模板（`ts_code, period, rule_id, label, notes, severity, industry`）
-- 复核标签通过 `/api/reviews/*` 回流
+- 复核标签与 precision 仍通过 `/api/reviews/*` 保留给内部评估；研究员前端不展示复核队列、标注明细或 CSV 入口
 
 ## 项目结构
 
@@ -326,7 +328,7 @@ pytest -q
 ├── copilot/          # 后端包（API、服务、规则、存储、通知）
 ├── web/              # 原生 JS 前端工作台（index.html、app.js、components.js、styles.css）
 ├── eval/             # 基准 / 人工复核工具
-├── tests/            # pytest 套件（180+ 测试）
+├── tests/            # pytest + Node 前端测试套件（236 个 pytest，15 个 Node 测试）
 ├── config.yaml       # 非密钥配置
 ├── start_real.bat    # 一键本地启动（正式应用）
 ├── .github/workflows/disclosure-automation.yml
@@ -336,10 +338,12 @@ pytest -q
 ## 测试
 
 ```bash
-pytest -q
+python -m pytest --basetemp=.pytest_tmp -q
+npm test
+node --check web/app.js && node --check web/agent-chat.js && node --check web/agent-panel.js
 ```
 
-套件覆盖：API 路由、规则算术、披露扫描 bundle、job store 持久化/续扫、飞书渲染与分段、复核存储与指标、配置校验、覆盖池校验、前端契约。
+当前主分支验证规模：236 个 pytest、15 个 Node 前端测试。套件覆盖 API 路由、规则算术、披露扫描 bundle、job store 持久化/续扫、飞书渲染与分段、复核存储与内部评估指标、配置校验、覆盖池校验、前端产品化契约、Agent panel/chat 纯逻辑。
 
 ## 合规边界
 
