@@ -131,6 +131,7 @@ class RealReportService:
             company_names=self.settings.eval.company_names,
             tushare_ready=self.analyzer is not None,
             feishu_ready=bool(self.settings.notify.feishu_webhook),
+            agent_ready=self.agent_service is not None,
         )
 
     def analyze_disclosure_day_bundle(self, date):

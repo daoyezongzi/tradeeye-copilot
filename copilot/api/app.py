@@ -83,6 +83,7 @@ class AppMeta(BaseModel):
     company_names: dict[str, str]
     tushare_ready: bool
     feishu_ready: bool
+    agent_ready: bool = False
 
 
 class FeishuPreview(BaseModel):

@@ -142,3 +142,37 @@ def test_agent_chat_route_returns_400_for_missing_card(make_snapshot):
     )
 
     assert response.status_code == 400
+
+
+def test_agent_chat_response_includes_actions(make_snapshot):
+    card = build_company_card(Context(ts_code="000001.SZ", current=make_snapshot()), [])
+
+    class FakeAgent:
+        def answer_question(self, ts_code, period, question, session_id=None):
+            return AgentChatResult(
+                session_id="session-1",
+                answer="建议重抽。",
+                references=[],
+                message_id="message-1",
+                actions=[
+                    {"action": "refetch_company", "params": {"ts_code": ts_code, "period": period}, "reason": "研究员要求"}
+                ],
+            )
+
+    service = FakeFullService()
+    service.get_company_card = lambda ts_code, period: card
+    client = TestClient(create_app(service, agent_service=FakeAgent()))
+
+    response = client.post(
+        "/api/agent/chat",
+        json={"ts_code": "000001.SZ", "period": "20250630", "question": "再抓一遍"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["actions"] == [
+        {
+            "action": "refetch_company",
+            "params": {"ts_code": "000001.SZ", "period": "20250630"},
+            "reason": "研究员要求",
+        }
+    ]
