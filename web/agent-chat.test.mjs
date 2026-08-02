@@ -9,6 +9,19 @@ import {
   routeAction,
 } from "./agent-chat.js";
 
+test("bind card keeps name-first display fields for panel context", () => {
+  const state = reduceBindCard(createChatState(), {
+    ts_code: "603026.SH",
+    period: "20250630",
+    title: "石大胜华",
+    subtitle: "603026.SH · 2025 半年报",
+  });
+
+  assert.equal(state.currentCard.title, "石大胜华");
+  assert.equal(state.currentCard.subtitle, "603026.SH · 2025 半年报");
+  assert.equal(state.currentKey, "603026.SH:20250630");
+});
+
 test("bindCard starts a current group and clears session on card change", () => {
   let state = createChatState();
   state = reduceBindCard(state, { ts_code: "000001.SZ", period: "20250630", severity: "YELLOW" });

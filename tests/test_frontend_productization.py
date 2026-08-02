@@ -208,7 +208,8 @@ def test_rendering_escapes_untrusted_values(js):
     assert "function escapeHtml(value)" in js
     # 表格用 innerHTML 拼接，每个插值都必须转义
     assert "escapeHtml(event.message)" in js
-    assert "escapeHtml(entry.rule_id)" in js
+    assert "escapeHtml(event.ts_code)" in js
+    assert "escapeHtml(event.status)" in js
     # 公司卡走 textContent，不用 innerHTML
     assert ".innerHTML = `" not in js.split("function renderCard(")[1].split("function renderDataProblemGroup(")[0]
 

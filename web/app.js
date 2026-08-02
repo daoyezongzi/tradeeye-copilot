@@ -290,6 +290,24 @@ function displayName(tsCode) {
   return state.meta.company_names[tsCode] || "";
 }
 
+function companyTitle(tsCode) {
+  return displayName(tsCode) || tsCode;
+}
+
+function companySubtitle(tsCode, period) {
+  return `${tsCode} · ${periodLabel(period)}`;
+}
+
+function agentCardContext(card) {
+  return {
+    ts_code: card.ts_code,
+    period: card.period,
+    severity: severityKey(card),
+    title: companyTitle(card.ts_code),
+    subtitle: companySubtitle(card.ts_code, card.period),
+  };
+}
+
 function severityKey(card) {
   if (card.max_severity === "RED") return "RED";
   if (card.max_severity === "YELLOW") return "YELLOW";
@@ -591,10 +609,10 @@ function renderCard(card, options = {}) {
 
   const name = document.createElement("span");
   name.className = "card__name";
-  name.textContent = displayName(card.ts_code) || card.ts_code;
+  name.textContent = companyTitle(card.ts_code);
   const code = document.createElement("span");
   code.className = "card__code";
-  code.textContent = `${card.ts_code} · ${card.period}`;
+  code.textContent = companySubtitle(card.ts_code, card.period);
   const summary = document.createElement("span");
   summary.className = "card__sum";
   summary.textContent = card.findings[0]?.title || "规则未触发异常";
@@ -612,7 +630,7 @@ function renderCard(card, options = {}) {
     push.append(chevron);
     head.addEventListener("click", () => node.classList.toggle("open"));
   }
-  node.addEventListener("click", () => state.agent?.bindCard({ ts_code: card.ts_code, period: card.period, severity: key }));
+  node.addEventListener("click", () => state.agent?.bindCard(agentCardContext(card)));
   head.append(name, code, summary, push);
 
   const body = document.createElement("div");
@@ -654,13 +672,13 @@ function renderDataProblemGroup(events) {
   table.className = "table-wrap";
   const rows = events
     .map((event) => {
-      const name = displayName(event.ts_code);
-      return `<tr><td class="mono">${escapeHtml(event.ts_code)}</td><td>${escapeHtml(name)}</td><td class="mono">${escapeHtml(event.period)}</td><td>${escapeHtml(event.industry || "unknown")}</td><td>${escapeHtml(event.status)}</td><td>${escapeHtml(event.message)}</td></tr>`;
+      const name = companyTitle(event.ts_code);
+      return `<tr><td>${escapeHtml(name)}</td><td class="mono">${escapeHtml(event.ts_code)}</td><td class="mono">${escapeHtml(periodLabel(event.period))}</td><td>${escapeHtml(event.industry || "unknown")}</td><td>${escapeHtml(event.status)}</td><td>${escapeHtml(event.message)}</td></tr>`;
     })
     .join("");
   table.innerHTML = `
     <table>
-      <thead><tr><th>代码</th><th>名称</th><th>报告期</th><th>行业</th><th>状态</th><th>原因</th></tr></thead>
+      <thead><tr><th>名称</th><th>代码</th><th>报告期</th><th>行业</th><th>状态</th><th>原因</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
@@ -700,7 +718,7 @@ function renderCards() {
       group.cards.forEach((card, index) => {
         if (index > 0) brief.append(document.createTextNode("、"));
         const name = document.createElement("b");
-        name.textContent = displayName(card.ts_code) || card.ts_code;
+        name.textContent = companyTitle(card.ts_code);
         brief.append(name);
       });
       brief.append(document.createTextNode("。仅汇总数量，不逐条展开。"));
@@ -768,7 +786,7 @@ function renderDiagnostics(result) {
   const rows = result.events
     .map(
       (event) =>
-        `<tr><td class="mono">${escapeHtml(event.ts_code)}</td><td>${escapeHtml(displayName(event.ts_code))}</td><td class="mono">${escapeHtml(event.period)}</td><td>${escapeHtml(event.industry || "unknown")}</td><td>${escapeHtml(event.status)}</td><td>${escapeHtml(event.message)}</td></tr>`
+        `<tr><td>${escapeHtml(companyTitle(event.ts_code))}</td><td class="mono">${escapeHtml(event.ts_code)}</td><td class="mono">${escapeHtml(periodLabel(event.period))}</td><td>${escapeHtml(event.industry || "unknown")}</td><td>${escapeHtml(event.status)}</td><td>${escapeHtml(event.message)}</td></tr>`
     )
     .join("");
   table.innerHTML = `
@@ -902,7 +920,7 @@ function exportBundleCsv() {
     const top = card?.findings[0];
     return [
       event.ts_code,
-      displayName(event.ts_code),
+      companyTitle(event.ts_code),
       event.period,
       event.industry || "unknown",
       event.status,
@@ -1133,7 +1151,7 @@ async function loadCompany(tsCode, period) {
     companyPermalinkHint.textContent = `固定链接 #/company/${tsCode}/${period}`;
     if (result.card) {
       companyDetail.replaceChildren(renderCard(result.card, { standalone: true }));
-      state.agent?.bindCard({ ts_code: result.card.ts_code, period: result.card.period, severity: severityKey(result.card) });
+      state.agent?.bindCard(agentCardContext(result.card));
     } else {
       companyDetail.replaceChildren(makeEmpty(`${result.status}：${result.message}`));
     }

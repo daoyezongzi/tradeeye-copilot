@@ -6,11 +6,23 @@ import {
   agentRobotIconParts,
   clampPanelState,
   defaultPanelState,
+  formatAgentCard,
   isNearRightDock,
   readPanelState,
   shouldAutoScroll,
   writePanelState,
 } from "./agent-panel.js";
+
+test("formatAgentCard renders name first and code subtitle", () => {
+  assert.deepEqual(
+    formatAgentCard({ title: "石大胜华", subtitle: "603026.SH · 2025 半年报", ts_code: "603026.SH", period: "20250630" }),
+    { title: "石大胜华", subtitle: "603026.SH · 2025 半年报" },
+  );
+  assert.deepEqual(
+    formatAgentCard({ ts_code: "603026.SH", period: "20250630" }),
+    { title: "603026.SH", subtitle: "20250630" },
+  );
+});
 
 test("agent launcher uses accessible robot icon without visible text", () => {
   assert.equal(agentLauncherLabel, "打开 Agent 问答");

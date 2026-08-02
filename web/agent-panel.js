@@ -80,8 +80,11 @@ function textNode(text) {
   return document.createTextNode(text == null ? "" : String(text));
 }
 
-function formatCard(card) {
-  return `${card.ts_code} · ${card.period}`;
+export function formatAgentCard(card) {
+  return {
+    title: card.title || card.ts_code || "未知公司",
+    subtitle: card.subtitle || card.period || "",
+  };
 }
 
 function createMessage(role, text, references = [], options = {}) {
@@ -382,13 +385,21 @@ export function createAgentPanel({ mount = document.body, onSend = null, onActio
       group.className = "agent-group agent-group--current";
       const headNode = document.createElement("div");
       headNode.className = "agent-group__head";
+      const formatted = formatAgentCard(card);
       const groupTitle = document.createElement("span");
       groupTitle.className = "agent-group__title";
-      groupTitle.textContent = formatCard(card);
+      groupTitle.textContent = formatted.title;
+      headNode.append(groupTitle);
+      if (formatted.subtitle) {
+        const groupSubtitle = document.createElement("span");
+        groupSubtitle.className = "agent-group__subtitle";
+        groupSubtitle.textContent = formatted.subtitle;
+        headNode.append(groupSubtitle);
+      }
       const badge = document.createElement("span");
       badge.className = "agent-group__badge";
       badge.textContent = "当前";
-      headNode.append(groupTitle, badge);
+      headNode.append(badge);
       const body = document.createElement("div");
       body.className = "agent-group__body";
       group.append(headNode, body);
@@ -404,7 +415,8 @@ export function createAgentPanel({ mount = document.body, onSend = null, onActio
         send.disabled = true;
         return;
       }
-      context.textContent = `当前：${formatCard(card)}`;
+      const formatted = formatAgentCard(card);
+      context.textContent = formatted.subtitle ? `当前：${formatted.title} / ${formatted.subtitle}` : `当前：${formatted.title}`;
       input.placeholder = "向 Agent 提问…";
       input.disabled = false;
       send.disabled = false;
