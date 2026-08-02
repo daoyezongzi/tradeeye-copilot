@@ -171,7 +171,7 @@ cp .env.example .env
 密钥可以继续写在仓库内 `.env`（已被 `.gitignore` 忽略），也可以拆到仓库外的物理隔离目录：
 
 ```text
-C:\Users\Soyo\Documents\.secrets\
+%USERPROFILE%\Documents\.secrets\
   .tushare              # TUSHARE_TOKEN
   .feishu               # FEISHU_WEBHOOK / FEISHU_VERIFICATION_TOKEN
   .deepseek             # LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
@@ -183,7 +183,7 @@ C:\Users\Soyo\Documents\.secrets\
 ```text
 系统环境变量
 → TRADEEYE_SECRETS_DIR 指定目录下的 .tushare / .feishu / .deepseek / tradeeye-copilot.env
-→ C:\Users\Soyo\Documents\.secrets 下的同名文件
+→ 当前用户 Documents\.secrets 下的同名文件（Windows: %USERPROFILE%\Documents\.secrets；macOS/Linux: ~/Documents/.secrets）
 → 仓库内 .env
 → config.yaml 非密钥配置
 ```
@@ -191,19 +191,19 @@ C:\Users\Soyo\Documents\.secrets\
 示例：
 
 ```env
-# .env，或 C:\Users\Soyo\Documents\.secrets\.tushare
+# .env，或 %USERPROFILE%\Documents\.secrets\.tushare
 TUSHARE_TOKEN=...
 
-# .env，或 C:\Users\Soyo\Documents\.secrets\.feishu
+# .env，或 %USERPROFILE%\Documents\.secrets\.feishu
 FEISHU_WEBHOOK=...
 FEISHU_VERIFICATION_TOKEN=...
 
-# .env，或 C:\Users\Soyo\Documents\.secrets\.deepseek
+# .env，或 %USERPROFILE%\Documents\.secrets\.deepseek
 LLM_API_KEY=...
 LLM_BASE_URL=https://api.deepseek.com/v1
 LLM_MODEL=deepseek-chat
 
-# .env，或 C:\Users\Soyo\Documents\.secrets\tradeeye-copilot.env
+# .env，或 %USERPROFILE%\Documents\.secrets\tradeeye-copilot.env
 AUTOMATION_TRIGGER_TOKEN=...
 PUBLIC_BASE_URL=...
 ```

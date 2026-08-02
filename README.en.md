@@ -171,7 +171,7 @@ cp .env.example .env
 Secrets can stay in the repository-local `.env` file (ignored by `.gitignore`), or be split into a physically isolated directory outside the repository:
 
 ```text
-C:\Users\Soyo\Documents\.secrets\
+%USERPROFILE%\Documents\.secrets\
   .tushare              # TUSHARE_TOKEN
   .feishu               # FEISHU_WEBHOOK / FEISHU_VERIFICATION_TOKEN
   .deepseek             # LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
@@ -183,7 +183,7 @@ Load order:
 ```text
 system environment variables
 → .tushare / .feishu / .deepseek / tradeeye-copilot.env under TRADEEYE_SECRETS_DIR
-→ same files under C:\Users\Soyo\Documents\.secrets
+→ same files under the current user's Documents\.secrets directory (Windows: %USERPROFILE%\Documents\.secrets; macOS/Linux: ~/Documents/.secrets)
 → repository-local .env
 → non-secret config.yaml
 ```
@@ -191,19 +191,19 @@ system environment variables
 Example:
 
 ```env
-# .env, or C:\Users\Soyo\Documents\.secrets\.tushare
+# .env, or %USERPROFILE%\Documents\.secrets\.tushare
 TUSHARE_TOKEN=...
 
-# .env, or C:\Users\Soyo\Documents\.secrets\.feishu
+# .env, or %USERPROFILE%\Documents\.secrets\.feishu
 FEISHU_WEBHOOK=...
 FEISHU_VERIFICATION_TOKEN=...
 
-# .env, or C:\Users\Soyo\Documents\.secrets\.deepseek
+# .env, or %USERPROFILE%\Documents\.secrets\.deepseek
 LLM_API_KEY=...
 LLM_BASE_URL=https://api.deepseek.com/v1
 LLM_MODEL=deepseek-chat
 
-# .env, or C:\Users\Soyo\Documents\.secrets\tradeeye-copilot.env
+# .env, or %USERPROFILE%\Documents\.secrets\tradeeye-copilot.env
 AUTOMATION_TRIGGER_TOKEN=...
 PUBLIC_BASE_URL=...
 ```
