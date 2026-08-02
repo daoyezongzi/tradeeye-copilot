@@ -16,6 +16,9 @@ export const defaultPanelState = {
   height: 520,
 };
 
+export const agentLauncherLabel = "打开 Agent 问答";
+export const agentRobotIconParts = ["antenna", "head", "eye-left", "eye-right", "mouth"];
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 export function isNearRightDock({ left, width, viewportWidth, threshold = DOCK_THRESHOLD }) {
@@ -119,6 +122,18 @@ function createMessage(role, text, references = [], options = {}) {
   return node;
 }
 
+function createRobotIcon() {
+  const icon = document.createElement("span");
+  icon.className = "agent-robot";
+  icon.setAttribute("aria-hidden", "true");
+  for (const part of agentRobotIconParts) {
+    const node = document.createElement("span");
+    node.className = `agent-robot__${part}`;
+    icon.append(node);
+  }
+  return icon;
+}
+
 function viewportSize() {
   return { width: window.innerWidth, height: window.innerHeight };
 }
@@ -192,12 +207,8 @@ export function createAgentPanel({ mount = document.body, onSend = null, onActio
   const fab = document.createElement("button");
   fab.type = "button";
   fab.className = "agent-fab";
-  const fabMark = document.createElement("span");
-  fabMark.className = "brand-mark";
-  fabMark.setAttribute("aria-hidden", "true");
-  const fabText = document.createElement("span");
-  fabText.textContent = "Agent";
-  fab.append(fabMark, fabText);
+  fab.setAttribute("aria-label", agentLauncherLabel);
+  fab.append(createRobotIcon());
   fab.setAttribute("aria-expanded", String(state.open));
 
   root.append(resize, head, context, log, form);

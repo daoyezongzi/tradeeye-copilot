@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  agentLauncherLabel,
+  agentRobotIconParts,
   clampPanelState,
   defaultPanelState,
   isNearRightDock,
@@ -10,6 +12,11 @@ import {
   writePanelState,
 } from "./agent-panel.js";
 
+test("agent launcher uses accessible robot icon without visible text", () => {
+  assert.equal(agentLauncherLabel, "打开 Agent 问答");
+  assert.deepEqual(agentRobotIconParts, ["antenna", "head", "eye-left", "eye-right", "mouth"]);
+  assert.equal(agentRobotIconParts.includes("Agent"), false);
+});
 test("isNearRightDock returns true within threshold", () => {
   assert.equal(isNearRightDock({ left: 956, width: 320, viewportWidth: 1280, threshold: 24 }), true);
   assert.equal(isNearRightDock({ left: 900, width: 320, viewportWidth: 1280, threshold: 24 }), false);

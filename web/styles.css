@@ -1722,12 +1722,72 @@ dialog::backdrop {
   right: var(--space-5);
   bottom: var(--space-5);
   z-index: 18;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
   border-radius: 999px;
   box-shadow: var(--shadow-3);
 }
+
+.agent-robot {
+  position: relative;
+  display: block;
+  width: 25px;
+  height: 25px;
+}
+
+.agent-robot__antenna {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  border-radius: var(--radius-sm) 0 0 0;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.agent-robot__head {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 0;
+  height: 19px;
+  border: 2px solid currentColor;
+  border-radius: 8px;
+}
+
+.agent-robot__eye-left,
+.agent-robot__eye-right {
+  position: absolute;
+  top: 13px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--clay);
+}
+
+.agent-robot__eye-left {
+  left: 7px;
+}
+
+.agent-robot__eye-right {
+  right: 7px;
+}
+
+.agent-robot__mouth {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
 
 @media (prefers-reduced-motion: no-preference) {
   .agent-message--assistant .agent-message__body {
