@@ -18,8 +18,8 @@ def css() -> str:
     return Path("web/styles.css").read_text(encoding="utf-8")
 
 
-def test_workbench_information_architecture_has_two_researcher_views(html):
-    for view in ["workbench", "company"]:
+def test_workbench_information_architecture_has_three_researcher_views(html):
+    for view in ["workbench", "company", "stock-pool"]:
         assert f'id="view-{view}"' in html
         assert f'id="tab-{view}"' in html
     for removed in ["review", "diagnostics"]:
@@ -79,7 +79,8 @@ def test_developer_panel_keeps_operations_without_review_exposure(html, js):
     assert 'el("refresh-notify-logs").addEventListener("click", loadNotifyLogs)' in js
 
 
-def test_feishu_preview_requires_send_confirmation(html, js):
+def test_manual_feishu_send_ui_is_hidden_but_backend_flow_remains(html, js):
+    assert 'id="preview-feishu" class="tonal" hidden' in html
     assert 'id="feishu-dialog"' in html
     assert 'id="feishu-preview-text"' in html
     assert 'id="cancel-feishu"' in html
@@ -108,7 +109,7 @@ def test_company_names_come_from_meta_route(js):
 
 
 def test_navigation_views_exclude_review_route(js):
-    assert 'const VIEWS = ["workbench", "company"]' in js
+    assert 'const VIEWS = ["workbench", "company", "stock-pool"]' in js
     assert 'review: "复核队列"' not in js
     assert 'if (VIEWS.includes(parts[0])) return { view: parts[0] };' in js
     assert 'navigate("#/workbench")' in js
@@ -133,6 +134,24 @@ def test_single_company_input_supports_company_name_candidates(html, js):
     assert "renderCompanyOptions();" in js
     assert 'const resolved = resolveCompanyInput(el("company-ts-code").value);' in js
     assert 'notify("请输入覆盖池内的股票代码或公司名称", true);' in js
+
+
+def test_stock_pool_view_supports_editable_custom_pool(html, js):
+    assert 'id="tab-stock-pool"' in html
+    assert 'id="view-stock-pool"' in html
+    assert 'id="stock-pool-list"' in html
+    assert 'id="stock-pool-ts-code"' in html
+    assert 'id="stock-pool-name"' in html
+    assert 'id="add-stock-pool-item"' in html
+    assert 'const VIEWS = ["workbench", "company", "stock-pool"]' in js
+    assert 'listStockPool' in js
+    assert 'upsertStockPoolItem' in js
+    assert 'removeStockPoolItem' in js
+    assert 'function renderStockPool(items)' in js
+    assert 'data-remove-stock' in js
+    assert '>删除</button>' in js
+    assert 'function loadStockPool()' in js
+    assert 'function addStockPoolItem()' in js
 
 
 def test_scan_progress_reports_elapsed_time(html, js, css):
@@ -245,19 +264,23 @@ def test_report_period_is_a_bounded_select(html, js):
 
 
 def test_disclosure_scan_uses_cancellable_job_polling(html, js):
-    # 扫描按钮是单节点三态，空闲态不再常驻一个永远灰着的停止按钮
     assert 'id="start-disclosure-scan"' in html
-    assert 'id="stop-disclosure-scan"' not in html
+    assert 'id="pause-disclosure-scan"' in html
+    assert 'id="resume-disclosure-scan"' in html
+    assert 'id="stop-disclosure-scan"' in html
     assert 'id="analyze-disclosure-day"' not in html
     assert 'id="scan-disclosure-day"' not in html
-    # 三处 disabled 重置收敛到一个函数
-    assert "function setScanState(next)" in js
-    # disabled 只有一个赋值点，锁住"收敛"这个不变量
-    assert js.count("scanButton.disabled") == 1
-    assert 'setScanState("cancelling")' in js
-    # 每条终止路径都要清 activeJobId，否则 loadDisclosureDay 的守卫会永久拦住下一次扫描：
-    # 正常收尾（finishDisclosureJob）与轮询失败 catch 各一处
-    assert js.count("state.activeJobId = null") == 2
+    assert "function setScanControls(next)" in js
+    assert "pauseDisclosureDayJob(jobId)" in js
+    assert "resumeDisclosureDayJob(jobId)" in js
+    assert "pauseDisclosureScan" in js
+    assert "resumePausedDisclosureScan" in js
+    assert "stopDisclosureScan" in js
+    assert '"/api/disclosure-day/jobs/"' in js
+    assert '"/pause"' in js
+    assert '"/resume"' in js
+    # 每条释放活跃 job 的路径都要清 activeJobId：正常收尾、轮询失败、暂停后继续创建新 job。
+    assert js.count("state.activeJobId = null") == 3
     assert "/api/disclosure-day/jobs" in js
     assert "startDisclosureDayJob(date)" in js
     assert "getDisclosureDayJob(jobId)" in js

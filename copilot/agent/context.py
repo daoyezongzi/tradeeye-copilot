@@ -21,6 +21,8 @@ def build_preset_context(card: CompanyCard) -> str:
     payload = {
         "ts_code": card.ts_code,
         "period": card.period,
+        "card_status": card.card_status,
+        "fact_line": card.fact_line,
         "facts": [fact.model_dump() for fact in card.facts],
         "findings": [finding.model_dump() for finding in card.findings],
         "classification": card.classification.model_dump() if card.classification is not None else None,

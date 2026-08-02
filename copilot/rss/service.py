@@ -4,7 +4,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from copilot.rss.announcements import AnnouncementEvent, classify_announcement, parse_rss_entries
-from copilot.service.analyzer import CompanyAnalysisResult, CompanyAnalysisStatus
+from copilot.service.analyzer import CompanyAnalysisResult
 
 
 class AnalyzerLike(Protocol):
@@ -59,16 +59,8 @@ class RssPollService:
                 key = (event.ts_code, event.period, event.link)
                 if key in self._seen_keys:
                     continue
-                try:
-                    result = self.analyzer.analyze_company(event.ts_code, event.period)
-                except Exception as exc:
-                    event.status = "DATA_PENDING"
-                    errors.append(f"{event.ts_code} {event.period}: {exc}")
-                    matched.append(event)
-                    continue
-                event.status = "ANALYZED" if result.status == CompanyAnalysisStatus.OK else "DATA_PENDING"
-                if event.status == "ANALYZED":
-                    self._seen_keys.add(key)
+                event.status = "MATCHED"
+                self._seen_keys.add(key)
                 matched.append(event)
         return RssPollResult(
             seen_count=seen_count,

@@ -1,0 +1,31 @@
+name: RSS Feishu Reminder
+
+on:
+  schedule:
+    - cron: "0 9 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Reminder date in YYYYMMDD; defaults to current UTC date"
+        required: false
+      rss_feeds:
+        description: "Optional comma-separated RSS feed URLs; defaults to config.yaml rss.feeds"
+        required: false
+
+jobs:
+  rss-feishu-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Send RSS Feishu reminder
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          DISCLOSURE_DATE: ${{ github.event.inputs.date }}
+          RSS_FEEDS: ${{ github.event.inputs.rss_feeds || secrets.RSS_FEEDS }}
+        run: python -m copilot.rss.github_action

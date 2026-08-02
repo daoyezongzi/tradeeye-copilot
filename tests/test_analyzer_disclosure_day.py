@@ -107,7 +107,9 @@ def test_analyze_disclosure_day_preserves_disclosed_count_when_one_company_not_r
     summary = service.analyze_disclosure_day("20250821")
 
     assert summary.disclosed_count == 2
-    assert [card.ts_code for card in summary.cards] == ["000001.SZ"]
+    assert [card.ts_code for card in summary.cards] == ["000001.SZ", "600000.SH"]
+    blocked = next(card for card in summary.cards if card.ts_code == "600000.SH")
+    assert blocked.card_status.value == "BLOCKED"
 
 
 def test_analyze_disclosure_day_skips_completed_codes_when_resuming():

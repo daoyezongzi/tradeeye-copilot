@@ -9,7 +9,7 @@ from copilot.datasource.fundamentals import CompanyProfile, TushareFetchCancelle
 from copilot.industry import industry_for_ts_code, resolve_classification
 from copilot.models import ClassificationResult, MappingStatus, PeriodSnapshot
 from copilot.observability import RuntimeStats
-from copilot.report.builder import CompanyCard, DailySummary, build_company_card, build_facts
+from copilot.report.builder import CompanyCard, DailySummary, build_blocked_company_card, build_company_card, build_facts
 from copilot.rules.registry import build_rules, evaluate_rule_results, run_rules
 from copilot.service.disclosure_scan import CompanyAnalysisStatus, DisclosureAnalysisBundle, DisclosureProgressEvent, DisclosureScanResult, build_analysis_bundle
 
@@ -81,18 +81,22 @@ class AnalyzerService:
             self._fetch_and_store(ts_code, prior_year_period(period))
 
             if not self._current_ready(ts_code, current):
+                message = f"Tushare 暂未返回 {ts_code} {period} 的完整财务快照"
                 return CompanyAnalysisResult(
                     status=CompanyAnalysisStatus.DATA_NOT_READY,
-                    message=f"Tushare 暂未返回 {ts_code} {period} 的完整财务快照",
+                    message=message,
+                    card=build_blocked_company_card(ts_code, period, message),
                 )
 
             ctx = assemble_context(self.store, ts_code, period)
             ctx.metadata["industry"] = industry_for_ts_code(ts_code, self.company_industries).value
             check = run_hard_checks(ctx)
             if check.status != CheckStatus.OK:
+                message = "；".join(check.messages)
                 return CompanyAnalysisResult(
                     status=CompanyAnalysisStatus.DATA_INCOMPLETE,
-                    message="；".join(check.messages),
+                    message=message,
+                    card=build_blocked_company_card(ts_code, period, message),
                 )
 
             try:
@@ -124,13 +128,19 @@ class AnalyzerService:
         except TushareFetchCancelled:
             raise
         except Exception as exc:
-            return CompanyAnalysisResult(status=CompanyAnalysisStatus.ERROR, message=str(exc))
+            message = str(exc)
+            return CompanyAnalysisResult(
+                status=CompanyAnalysisStatus.ERROR,
+                message=message,
+                card=build_blocked_company_card(ts_code, period, message),
+            )
 
     def analyze_disclosure_day_bundle(
         self,
         date: str,
         progress_callback=None,
         should_cancel=None,
+        should_pause=None,
         skip_ts_codes: set[str] | None = None,
     ) -> DisclosureAnalysisBundle:
         if self.calendar is None:
@@ -145,6 +155,10 @@ class AnalyzerService:
             if should_cancel is not None and should_cancel():
                 if progress_callback is not None:
                     progress_callback(DisclosureProgressEvent(stage="cancelled", processed_count=len(results), total_count=total_count))
+                break
+            if should_pause is not None and should_pause():
+                if progress_callback is not None:
+                    progress_callback(DisclosureProgressEvent(stage="paused", processed_count=len(results), total_count=total_count))
                 break
             industry = industry_for_ts_code(event.ts_code, self.company_industries).value
             if progress_callback is not None:

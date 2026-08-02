@@ -1,7 +1,7 @@
 import httpx
 
 from copilot.models import Context, Evidence, Finding, Severity
-from copilot.notify.feishu import FeishuNotifier, render_daily_summary_text, render_disclosure_interactive_card
+from copilot.notify.feishu import FeishuNotifier, render_daily_summary_text, render_disclosure_interactive_card, render_rss_disclosure_reminder_text
 from copilot.report.builder import build_company_card, build_daily_summary
 
 
@@ -25,7 +25,26 @@ def test_render_daily_summary_text(make_snapshot):
     assert "现金流质量偏弱" in text
 
 
-def test_feishu_notifier_posts_text_payload():
+def test_render_rss_disclosure_reminder_text_lists_matched_events():
+    from copilot.rss.announcements import AnnouncementEvent
+
+    text = render_rss_disclosure_reminder_text(
+        "20250821",
+        [
+            AnnouncementEvent(ts_code="603026.SH", title="石大胜华：2025年半年度报告", link="https://example.com/a", period="20250630", status="MATCHED"),
+            AnnouncementEvent(ts_code="600151.SH", title="航天机电：2025年半年度报告", link="https://example.com/b", period="20250630", status="MATCHED"),
+        ],
+        {"603026.SH": "石大胜华", "600151.SH": "航天机电"},
+    )
+
+    assert "20250821 财报披露提醒" in text
+    assert "今日 RSS 命中 2 条财报公告" in text
+    assert "603026.SH 石大胜华 20250630" in text
+    assert "600151.SH 航天机电 20250630" in text
+    assert "请在 TradeEye 工作台选择披露日后手动扫描" in text
+
+
+
     captured = {}
 
     def handler(request: httpx.Request) -> httpx.Response:

@@ -51,7 +51,25 @@ def test_disclosure_job_store_tracks_progress_result_and_cancel():
     assert cancelled.processed_count == 1
 
 
-def test_disclosure_job_store_marks_completed_with_bundle():
+def test_disclosure_job_store_tracks_pause_and_resume_requests():
+    store = DisclosureJobStore(company_names={})
+    job = store.start("20250825")
+
+    pause_request = store.request_pause(job.job_id)
+    assert pause_request.current_stage == "pause_requested"
+    assert store.should_pause(job.job_id) is True
+
+    paused = store.mark_paused(job.job_id, _bundle("20250825"))
+    assert paused.status == "paused"
+    assert paused.bundle.scan.disclosed_count == 1
+
+    resumed = store.request_resume(job.job_id)
+    assert resumed.status == "running"
+    assert resumed.current_stage == "resume_requested"
+    assert store.should_pause(job.job_id) is False
+
+
+
     store = DisclosureJobStore(company_names={})
     job = store.start("20250825")
 

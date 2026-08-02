@@ -170,6 +170,21 @@ def build_company_card(
     )
 
 
+def build_blocked_company_card(ts_code: str, period: str, message: str, company: CompanyIdentity | None = None) -> CompanyCard:
+    return CompanyCard(
+        ts_code=ts_code,
+        period=period,
+        fact_line=f"数据问题：{message}",
+        findings=[],
+        max_severity=None,
+        max_score=0.0,
+        company=company,
+        card_status=CardStatus.BLOCKED,
+        facts=[],
+        rule_results=[],
+    )
+
+
 def build_daily_summary(date: str, coverage_count: int, cards: list[CompanyCard], disclosed_count: int | None = None) -> DailySummary:
     severity_rank = {Severity.RED: 0, Severity.YELLOW: 1, Severity.INFO: 2, None: 3}
     ordered_cards = sorted(cards, key=lambda card: (severity_rank[card.max_severity], -card.max_score, card.ts_code))

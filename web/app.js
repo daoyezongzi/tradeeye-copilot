@@ -19,6 +19,7 @@ const diagnosticStatus = el("diagnostic-status");
 const jobHistory = el("job-history");
 const automationStatus = el("automation-status");
 const notifyLogTable = el("notify-log-table");
+const stockPoolList = el("stock-pool-list");
 const quarterlyReview = el("quarterly-review");
 const operationStatus = el("operation-status");
 const metaStatus = el("meta-status");
@@ -31,6 +32,9 @@ const feishuPreviewMeta = el("feishu-preview-meta");
 const feishuPreviewHint = el("feishu-preview-hint");
 const sendFeishuButton = el("send-feishu");
 const scanButton = el("start-disclosure-scan");
+const pauseScanButton = el("pause-disclosure-scan");
+const resumeScanButton = el("resume-disclosure-scan");
+const stopScanButton = el("stop-disclosure-scan");
 
 const snackbar = el("snackbar");
 const snackbarText = el("snackbar-text");
@@ -152,6 +156,22 @@ const api = {
     });
   },
 
+  async listStockPool() {
+    return requestJson("/api/stock-pool");
+  },
+
+  async upsertStockPoolItem(item) {
+    return requestJson("/api/stock-pool", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(item),
+    });
+  },
+
+  async removeStockPoolItem(tsCode) {
+    return requestJson(`/api/stock-pool/${tsCode}`, { method: "DELETE" });
+  },
+
   async agentChat(tsCode, period, question, sessionId = null) {
     const payload = { ts_code: tsCode, period, question };
     if (sessionId) payload.session_id = sessionId;
@@ -183,6 +203,14 @@ const api = {
     return requestJson(`/api/disclosure-day/jobs/${jobId}/cancel`, { method: "POST" });
   },
 
+  async pauseDisclosureDayJob(jobId) {
+    return requestJson("/api/disclosure-day/jobs/" + jobId + "/pause", { method: "POST" });
+  },
+
+  async resumeDisclosureDayJob(jobId) {
+    return requestJson("/api/disclosure-day/jobs/" + jobId + "/resume", { method: "POST" });
+  },
+
   async pruneDisclosureDayJobs(keepRecent = 20) {
     return requestJson(`/api/disclosure-day/jobs?keep_recent=${keepRecent}`, { method: "DELETE" });
   },
@@ -197,6 +225,14 @@ const api = {
 
   async pollRss() {
     return requestJson("/api/rss/poll", { method: "POST" });
+  },
+
+  async pollRssAndNotify(date = selectedDate()) {
+    return requestJson("/api/rss/poll/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+    });
   },
 
   async runDisclosureAutomation(date, notify = true) {
@@ -272,15 +308,19 @@ function createProgress(progressId, messageId, elapsedId) {
   };
 }
 
-/* 扫描按钮单节点三态。用两个节点互相 hide 的话，disabled 状态要在多处同步——
-   之前正是漏在这里：两个 catch 分支和 finishDisclosureJob 各自手动重置了一遍。 */
-function setScanState(next) {
+function setScanControls(next) {
   scanButton.dataset.state = next;
-  const scanning = next === "scanning" || next === "cancelling";
-  scanButton.textContent = next === "cancelling" ? "停止中…" : scanning ? "停止扫描" : "开始扫描";
-  scanButton.classList.toggle("outlined", scanning);
-  // cancelling 期间禁用，避免重复发取消请求
-  scanButton.disabled = next === "cancelling";
+  const running = next === "scanning";
+  const paused = next === "paused";
+  const stopping = next === "cancelling";
+  scanButton.hidden = running || paused || stopping;
+  pauseScanButton.hidden = !running;
+  resumeScanButton.hidden = !paused;
+  stopScanButton.hidden = !(running || paused || stopping);
+  pauseScanButton.disabled = stopping;
+  resumeScanButton.disabled = stopping;
+  stopScanButton.disabled = stopping;
+  stopScanButton.textContent = stopping ? "停止中…" : "停止扫描";
 }
 
 const scanProgress = createProgress("scan-progress", "progress-message", "progress-elapsed");
@@ -327,6 +367,53 @@ function resolveCompanyInput(value) {
     if (name === normalized) return tsCode;
   }
   return "";
+}
+
+function renderStockPool(items) {
+  const rows = items.map((item) => {
+    return `<tr><td class="mono">${escapeHtml(item.ts_code)}</td><td>${escapeHtml(item.name || "")}</td><td>${escapeHtml(item.industry || "generic")}</td><td><button class="outlined" data-remove-stock="${escapeHtml(item.ts_code)}">删除</button></td></tr>`;
+  }).join("");
+  stockPoolList.innerHTML = `
+    <table>
+      <thead><tr><th>代码</th><th>名称</th><th>行业配置</th><th>操作</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  stockPoolList.querySelectorAll("[data-remove-stock]").forEach((button) => {
+    button.addEventListener("click", () => removeStockPoolItem(button.dataset.removeStock));
+  });
+}
+
+async function loadStockPool() {
+  const items = await api.listStockPool();
+  renderStockPool(items);
+  state.meta.company_names = Object.fromEntries(items.filter((item) => item.name).map((item) => [item.ts_code, item.name]));
+  state.meta.coverage_count = items.length;
+  renderMeta();
+  renderCompanyOptions();
+}
+
+async function addStockPoolItem() {
+  const tsCode = el("stock-pool-ts-code").value.trim().toUpperCase();
+  if (!/^\d{6}\.(SZ|SH|BJ)$/.test(tsCode)) {
+    notify("请输入合法股票代码，例如 000001.SZ", true);
+    return;
+  }
+  await api.upsertStockPoolItem({
+    ts_code: tsCode,
+    name: el("stock-pool-name").value.trim() || null,
+    industry: el("stock-pool-industry").value || "generic",
+  });
+  el("stock-pool-ts-code").value = "";
+  el("stock-pool-name").value = "";
+  await loadStockPool();
+  notify("股票池已更新");
+}
+
+async function removeStockPoolItem(tsCode) {
+  await api.removeStockPoolItem(tsCode);
+  await loadStockPool();
+  notify("已从股票池移除");
 }
 
 function agentCardContext(card) {
@@ -391,10 +478,11 @@ function makeChapterHead(title, count, note) {
 
 /* ---------- 视图路由：hash 稳定 URL ---------- */
 
-const VIEWS = ["workbench", "company"];
+const VIEWS = ["workbench", "company", "stock-pool"];
 const VIEW_TITLES = {
   workbench: "披露日研判",
   company: "单票研判",
+  "stock-pool": "股票池",
 };
 
 function activateView(view) {
@@ -968,6 +1056,14 @@ function exportBundleCsv() {
 
 /* ---------- 数据加载 ---------- */
 
+function renderMeta() {
+  metaStatus.replaceChildren(
+    makeStatusDot(state.meta.tushare_ready ? "Tushare 就绪" : "Tushare 未配置", state.meta.tushare_ready),
+    makeStatusDot(state.meta.feishu_ready ? "飞书就绪" : "飞书未配置", state.meta.feishu_ready),
+    makeChip(`覆盖池 ${state.meta.coverage_count} 家`)
+  );
+}
+
 async function loadMeta() {
   try {
     state.meta = await api.getMeta();
@@ -976,11 +1072,7 @@ async function loadMeta() {
     return;
   }
   renderCompanyOptions();
-  metaStatus.replaceChildren(
-    makeStatusDot(state.meta.tushare_ready ? "Tushare 就绪" : "Tushare 未配置", state.meta.tushare_ready),
-    makeStatusDot(state.meta.feishu_ready ? "飞书就绪" : "飞书未配置", state.meta.feishu_ready),
-    makeChip(`覆盖池 ${state.meta.coverage_count} 家`)
-  );
+  renderMeta();
 }
 
 function renderJobHistory(jobs) {
@@ -1009,7 +1101,7 @@ function renderJobHistory(jobs) {
     const meta = document.createElement("span");
     meta.className = "muted mono";
     meta.textContent = `${job.processed_count || 0}/${job.total_count || "?"} · ${job.job_id}`;
-    if (job.status === "cancelled" && job.bundle) {
+    if (["cancelled", "paused"].includes(job.status) && job.bundle) {
       const action = document.createElement("button");
       action.type = "button";
       action.className = "text";
@@ -1038,7 +1130,7 @@ function startDisclosureJobPolling(jobId) {
         // 这里不清的话 loadDisclosureDay 的守卫会永久拦住下一次扫描
         state.activeJobId = null;
         scanProgress.hide();
-        setScanState("idle");
+        setScanControls("idle");
         setStatus({ error: error.message });
         notify(error.message, true);
       });
@@ -1050,7 +1142,7 @@ async function resumeDisclosureJob(job) {
   if (!job?.job_id || state.activeJobId) return;
   const date = job.date || selectedDate();
   scanProgress.start(`正在续扫 ${date}…`);
-  setScanState("scanning");
+  setScanControls("scanning");
   try {
     const resumed = await api.startDisclosureDayJob(date, job.job_id);
     state.activeJobId = resumed.job_id;
@@ -1059,10 +1151,26 @@ async function resumeDisclosureJob(job) {
     notify("已从历史扫描继续");
   } catch (error) {
     scanProgress.hide();
-    setScanState("idle");
+    setScanControls("idle");
     setStatus({ error: error.message });
     notify(error.message, true);
   }
+}
+
+async function pauseDisclosureScan() {
+  if (!state.activeJobId) return;
+  const job = await api.pauseDisclosureDayJob(state.activeJobId);
+  renderJobProgress(job);
+}
+
+async function resumePausedDisclosureScan() {
+  if (!state.activeJobId) return;
+  const pausedJobId = state.activeJobId;
+  const pausedJob = await api.resumeDisclosureDayJob(pausedJobId);
+  clearInterval(state.jobPollTimer);
+  state.jobPollTimer = null;
+  state.activeJobId = null;
+  await resumeDisclosureJob({ ...pausedJob, job_id: pausedJobId });
 }
 
 async function pruneJobHistory() {
@@ -1080,11 +1188,19 @@ function restoreDisclosureJob(job) {
   setStatus(job);
   if (["running", "pending"].includes(job.status)) {
     state.activeJobId = job.job_id;
-    setScanState("scanning");
+    setScanControls("scanning");
     scanProgress.start(`恢复轮询 ${job.date || job.job_id}…`);
     renderJobProgress(job);
     startDisclosureJobPolling(job.job_id);
     notify("已恢复运行中的扫描");
+    return;
+  }
+  if (job.status === "paused") {
+    state.activeJobId = job.job_id;
+    setScanControls("paused");
+    scanProgress.start(`已暂停 ${job.date || job.job_id}`);
+    renderJobProgress(job);
+    notify("已恢复暂停中的扫描");
     return;
   }
   finishDisclosureJob(job);
@@ -1120,7 +1236,7 @@ function finishDisclosureJob(job) {
   clearInterval(state.jobPollTimer);
   state.jobPollTimer = null;
   state.activeJobId = null;
-  setScanState("idle");
+  setScanControls("idle");
   scanProgress.stop(performance.now() - Number(job.elapsed_seconds || 0) * 1000, job.status === "cancelled" ? `已停止，完成 ${job.processed_count}/${job.total_count}` : `已完成 ${job.processed_count} 家分析`);
   if (job.bundle) {
     state.bundle = job.bundle;
@@ -1134,6 +1250,13 @@ function finishDisclosureJob(job) {
 async function pollDisclosureJob(jobId) {
   const job = await api.getDisclosureDayJob(jobId);
   renderJobProgress(job);
+  if (job.status === "paused") {
+    clearInterval(state.jobPollTimer);
+    state.jobPollTimer = null;
+    setScanControls("paused");
+    notify("扫描已暂停");
+    return;
+  }
   if (["completed", "cancelled", "failed"].includes(job.status)) {
     finishDisclosureJob(job);
   }
@@ -1141,13 +1264,13 @@ async function pollDisclosureJob(jobId) {
 
 async function stopDisclosureScan() {
   if (!state.activeJobId) return;
-  setScanState("cancelling");
+  const previous = scanButton.dataset.state === "paused" ? "paused" : "scanning";
+  setScanControls("cancelling");
   try {
     const job = await api.cancelDisclosureDayJob(state.activeJobId);
     renderJobProgress(job);
   } catch (error) {
-    // 取消请求失败：作业与轮询都还活着，回滚到 scanning 让用户能再点一次取消
-    setScanState("scanning");
+    setScanControls(previous);
     throw error;
   }
 }
@@ -1156,7 +1279,7 @@ async function loadDisclosureDay(date) {
   // 已有活跃作业时不再起新的一个，防止双击/hashchange 竞态起两个作业
   if (state.activeJobId) return;
   scanProgress.start(`正在启动 ${date} 覆盖池扫描…`);
-  setScanState("scanning");
+  setScanControls("scanning");
   try {
     const job = await api.startDisclosureDayJob(date);
     state.activeJobId = job.job_id;
@@ -1168,7 +1291,7 @@ async function loadDisclosureDay(date) {
     startDisclosureJobPolling(job.job_id);
   } catch (error) {
     scanProgress.hide();
-    setScanState("idle");
+    setScanControls("idle");
     setStatus({ error: error.message });
     notify(error.message, true);
   }
@@ -1340,22 +1463,20 @@ for (const name of VIEWS) {
   el(`tab-${name}`).addEventListener("click", () => navigate(`#/${name}`));
 }
 
-/* 同一个按钮按当前状态分派：空闲时开扫，扫描中发取消 */
 scanButton.addEventListener("click", () => {
-  if (scanButton.dataset.state === "idle") {
-    const date = selectedDate();
-    if (!date) {
-      notify("请先选择披露日期", true);
-      return;
-    }
-    navigate(`#/day/${date}`);
+  const date = selectedDate();
+  if (!date) {
+    notify("请先选择披露日期", true);
     return;
   }
-  stopDisclosureScan().catch((error) => {
-    setStatus({ error: error.message });
-    notify(error.message, true);
-  });
+  navigate(`#/day/${date}`);
 });
+pauseScanButton.addEventListener("click", () => pauseDisclosureScan().catch((error) => notify(error.message, true)));
+resumeScanButton.addEventListener("click", () => resumePausedDisclosureScan().catch((error) => notify(error.message, true)));
+stopScanButton.addEventListener("click", () => stopDisclosureScan().catch((error) => {
+  setStatus({ error: error.message });
+  notify(error.message, true);
+}));
 
 el("analyze-company").addEventListener("click", () => {
   const resolved = resolveCompanyInput(el("company-ts-code").value);
@@ -1368,6 +1489,7 @@ el("analyze-company").addEventListener("click", () => {
   navigate(`#/company/${resolved}/${period}`);
 });
 
+el("add-stock-pool-item").addEventListener("click", () => addStockPoolItem().catch((error) => notify(error.message, true)));
 el("preview-feishu").addEventListener("click", previewFeishu);
 sendFeishuButton.addEventListener("click", confirmSendFeishu);
 el("cancel-feishu").addEventListener("click", () => feishuDialog.close());
@@ -1379,9 +1501,9 @@ el("run-automation").addEventListener("click", runAutomation);
 el("refresh-notify-logs").addEventListener("click", loadNotifyLogs);
 el("poll-rss").addEventListener("click", async () => {
   try {
-    const result = await api.pollRss();
+    const result = await api.pollRssAndNotify();
     setStatus(result);
-    notify(`RSS 命中 ${result.matched_count} 条，已分析 ${result.analyzed_count} 条`);
+    notify(`RSS 命中 ${result.rss.matched_count} 条，飞书${result.sent ? "已推送" : "未推送：" + result.reason}`);
   } catch (error) {
     setStatus({ error: error.message });
     notify(error.message, true);
@@ -1419,6 +1541,7 @@ async function boot() {
   el("automation-date").value = el("disclosure-date").value;
   initPeriodSelect("20250630");
   await loadMeta();
+  await loadStockPool();
   await waitForAgentModules();
   initAgentPanel();
   renderCards();

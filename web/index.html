@@ -23,6 +23,7 @@
         <nav class="nav" role="tablist" aria-label="工作台视图">
           <button role="tab" id="tab-workbench" data-view="workbench" aria-selected="true">披露日研判</button>
           <button role="tab" id="tab-company" data-view="company" aria-selected="false">单票研判</button>
+          <button role="tab" id="tab-stock-pool" data-view="stock-pool" aria-selected="false">股票池</button>
         </nav>
       </div>
 
@@ -38,12 +39,15 @@
         <div class="app-bar__status">
           <!-- 日期选择器：控件值为 YYYY-MM-DD，调用接口前转成 YYYYMMDD -->
           <input id="disclosure-date" type="date" value="2025-08-21" aria-label="披露日期" />
-          <!-- 单节点双态：空闲「开始扫描」，扫描中原地变「停止扫描」 -->
+          <!-- 扫描控件：空闲开始，运行中可暂停/停止，暂停后可继续/停止 -->
           <button id="start-disclosure-scan" data-state="idle">开始扫描</button>
+          <button id="pause-disclosure-scan" class="outlined" hidden>暂停扫描</button>
+          <button id="resume-disclosure-scan" class="outlined" hidden>继续扫描</button>
+          <button id="stop-disclosure-scan" class="outlined" hidden>停止扫描</button>
           <!-- 竖线左侧是产出数据，右侧是分发数据 -->
           <span class="app-bar__sep" aria-hidden="true"></span>
           <div id="export-menu-mount"></div>
-          <button id="preview-feishu" class="tonal">预览飞书摘要</button>
+          <button id="preview-feishu" class="tonal" hidden>预览飞书摘要</button>
         </div>
       </header>
 
@@ -191,6 +195,41 @@
               <p id="company-permalink-hint"></p>
             </div>
             <div id="company-detail"></div>
+          </div>
+        </section>
+
+        <!-- ---------- 股票池 ---------- -->
+        <section id="view-stock-pool" class="view" role="tabpanel" aria-labelledby="tab-stock-pool" hidden>
+          <div class="surface">
+            <div class="section-head">
+              <h2>股票池</h2>
+              <p>维护披露日扫描与 RSS 提醒使用的覆盖池</p>
+            </div>
+            <div class="button-row">
+              <div class="field">
+                <label for="stock-pool-ts-code">股票代码</label>
+                <input id="stock-pool-ts-code" type="text" placeholder="000001.SZ" />
+              </div>
+              <div class="field">
+                <label for="stock-pool-name">公司名称</label>
+                <input id="stock-pool-name" type="text" placeholder="平安银行" />
+              </div>
+              <div class="field">
+                <label for="stock-pool-industry">行业配置</label>
+                <select id="stock-pool-industry">
+                  <option value="generic">generic</option>
+                  <option value="bank">bank</option>
+                </select>
+              </div>
+              <button id="add-stock-pool-item">加入股票池</button>
+            </div>
+          </div>
+          <div>
+            <div class="section-head">
+              <h2>当前股票池</h2>
+              <p>修改后会影响后续披露日扫描与 RSS 提醒匹配</p>
+            </div>
+            <div id="stock-pool-list" class="table-wrap"></div>
           </div>
         </section>
 

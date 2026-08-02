@@ -116,6 +116,6 @@ def test_analyzer_disclosure_scan_returns_status_for_each_event():
     assert result.coverage_count == 2
     assert result.disclosed_count == 2
     assert [(event.ts_code, event.status, event.has_card, event.industry) for event in result.events] == [
-        ("000001.SZ", CompanyAnalysisStatus.DATA_NOT_READY, False, "bank"),
+        ("000001.SZ", CompanyAnalysisStatus.DATA_NOT_READY, True, "bank"),
         ("920056.BJ", CompanyAnalysisStatus.OK, True, "generic"),
     ]

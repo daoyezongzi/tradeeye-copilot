@@ -73,6 +73,19 @@ def render_formal_disclosure_text(summary: DailySummary, scan: DisclosureScanRes
     return "\n".join(lines)
 
 
+def render_rss_disclosure_reminder_text(date: str, events, company_names: dict[str, str] | None = None) -> str:
+    names = company_names or {}
+    lines = [
+        f"{date} 财报披露提醒",
+        "",
+        f"今日 RSS 命中 {len(events)} 条财报公告：",
+    ]
+    for event in events:
+        lines.append(f"- {_display_name(event.ts_code, names)} {event.period}：{event.title}")
+    lines.extend(["", "请在 TradeEye 工作台选择披露日后手动扫描。"])
+    return "\n".join(lines)
+
+
 def split_feishu_text(text: str, max_chars: int = 3500) -> list[str]:
     if len(text) <= max_chars:
         return [text]

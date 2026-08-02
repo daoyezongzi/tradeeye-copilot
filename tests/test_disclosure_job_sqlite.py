@@ -47,7 +47,24 @@ def test_sqlite_disclosure_job_store_persists_status_across_instances(tmp_path):
     assert restored.bundle.scan.disclosed_count == 1
     assert second.should_cancel(job.job_id) is True
 
-def test_sqlite_disclosure_job_store_persists_resume_source_across_instances(tmp_path):
+def test_sqlite_disclosure_job_store_persists_pause_across_instances(tmp_path):
+    path = tmp_path / "jobs.sqlite"
+    first = SQLiteDisclosureJobStore(path, company_names={"603026.SH": "石大胜华"})
+    first.init_schema()
+    job = first.start("20250825")
+    first.request_pause(job.job_id)
+    first.mark_paused(job.job_id, _bundle("20250825"))
+
+    second = SQLiteDisclosureJobStore(path, company_names={"603026.SH": "石大胜华"})
+    second.init_schema()
+    restored = second.get(job.job_id)
+
+    assert restored.status == "paused"
+    assert restored.current_stage == "paused"
+    assert restored.bundle.scan.disclosed_count == 1
+    assert second.should_pause(job.job_id) is True
+
+
     path = tmp_path / "jobs.sqlite"
     first = SQLiteDisclosureJobStore(path, company_names={"603026.SH": "石大胜华"})
     first.init_schema()

@@ -10,7 +10,7 @@ from copilot.datasource.fundamentals import TushareFundamentalsClient
 from copilot.datasource.tushare_client import TushareTokenMissing, create_tushare_pro
 from copilot.eval.backtest import BacktestSummary
 from copilot.llm.client import LLMClient
-from copilot.notify.feishu import FeishuNotifier, render_disclosure_interactive_card, render_formal_disclosure_text, split_feishu_text
+from copilot.notify.feishu import FeishuNotifier, render_disclosure_interactive_card, render_formal_disclosure_text, render_rss_disclosure_reminder_text, split_feishu_text
 from copilot.report.builder import build_quarterly_review
 from copilot.scheduler import DisclosureAutomationJob, run_disclosure_automation_job
 from copilot.rss.service import RssPollResult, RssPollService
@@ -21,6 +21,7 @@ from copilot.service.notify_store import NotifyLogStore
 from copilot.service.report_cache import ReportCache
 from copilot.service.review_metrics import ReviewMetricsService
 from copilot.service.review_store import ReviewLabelStore
+from copilot.service.stock_pool import SQLiteStockPoolStore
 from copilot.store.sqlite import SQLiteStore
 
 
@@ -33,6 +34,13 @@ class RealReportService:
             company_names=getattr(self.settings.eval, "company_names", {}),
         )
         self.job_store.init_schema()
+        self.stock_pool = SQLiteStockPoolStore(
+            self.settings.database.path,
+            initial_codes=self.settings.eval.coverage_pool,
+            initial_names=getattr(self.settings.eval, "company_names", {}),
+            initial_industries=getattr(self.settings.eval, "company_industries", {}),
+        )
+        self.stock_pool.init_schema()
         self.review_store = ReviewLabelStore(self.settings.database.path)
         self.review_store.init_schema()
         self.review_metrics = ReviewMetricsService(self.review_store)
@@ -125,10 +133,35 @@ class RealReportService:
             self.cache.put_company(result.card)
         return result
 
+    def _stock_pool_coverage(self):
+        if hasattr(self, "stock_pool"):
+            return self.stock_pool.coverage_pool()
+        return getattr(self.settings.eval, "coverage_pool", [])
+
+    def _stock_pool_names(self):
+        if hasattr(self, "stock_pool"):
+            return self.stock_pool.company_names()
+        return getattr(self.settings.eval, "company_names", {})
+
+    def _stock_pool_industries(self):
+        if hasattr(self, "stock_pool"):
+            return self.stock_pool.company_industries()
+        return getattr(self.settings.eval, "company_industries", {})
+
+    def _apply_stock_pool_to_analyzer(self):
+        if self.analyzer is None:
+            return
+        self.analyzer.coverage_pool = self._stock_pool_coverage()
+        self.analyzer.company_industries = self._stock_pool_industries()
+
+    def _rss_company_map(self):
+        names = self._stock_pool_names()
+        return {name: ts_code for ts_code, name in names.items()} or {ts_code: ts_code for ts_code in self._stock_pool_coverage()}
+
     def get_meta(self):
         return AppMeta(
-            coverage_count=len(self.settings.eval.coverage_pool),
-            company_names=self.settings.eval.company_names,
+            coverage_count=len(self._stock_pool_coverage()),
+            company_names=self._stock_pool_names(),
             tushare_ready=self.analyzer is not None,
             feishu_ready=bool(self.settings.notify.feishu_webhook),
             agent_ready=self.agent_service is not None,
@@ -137,6 +170,7 @@ class RealReportService:
     def analyze_disclosure_day_bundle(self, date):
         if self.analyzer is None:
             raise HTTPException(status_code=503, detail="未配置 TUSHARE_TOKEN")
+        self._apply_stock_pool_to_analyzer()
         bundle = self.analyzer.analyze_disclosure_day_bundle(date)
         self._cache_bundle(bundle)
         return bundle
@@ -161,12 +195,15 @@ class RealReportService:
                 job.date,
                 progress_callback=lambda event: self.job_store.apply_progress(job_id, event),
                 should_cancel=lambda: self.job_store.should_cancel(job_id),
+                should_pause=lambda: self.job_store.should_pause(job_id),
                 skip_ts_codes=skip_ts_codes,
             )
             bundle = merge_analysis_bundles(resume_bundle, bundle)
             self._cache_bundle(bundle)
             if self.job_store.should_cancel(job_id):
                 return self.job_store.mark_cancelled(job_id, bundle)
+            if self.job_store.should_pause(job_id):
+                return self.job_store.mark_paused(job_id, bundle)
             return self.job_store.mark_completed(job_id, bundle)
         except Exception as exc:
             return self.job_store.mark_failed(job_id, str(exc))
@@ -187,6 +224,12 @@ class RealReportService:
 
     def cancel_disclosure_day_job(self, job_id, owner_id=None):
         return self.job_store.request_cancel(job_id, owner_id=owner_id)
+
+    def pause_disclosure_day_job(self, job_id, owner_id=None):
+        return self.job_store.request_pause(job_id, owner_id=owner_id)
+
+    def resume_disclosure_day_job(self, job_id, owner_id=None):
+        return self.job_store.request_resume(job_id, owner_id=owner_id)
 
     def prune_disclosure_day_jobs(self, keep_recent=20):
         return self.job_store.prune_finished(keep_recent)
@@ -215,7 +258,17 @@ class RealReportService:
     def poll_rss(self):
         if self.rss_service is None:
             return RssPollResult(seen_count=0, matched_count=0, analyzed_count=0, pending_count=0, events=[])
+        self.rss_service.company_to_ts_code = self._rss_company_map()
         return self.rss_service.poll()
+
+    def list_stock_pool(self):
+        return self.stock_pool.list_items()
+
+    def upsert_stock_pool_item(self, item):
+        return self.stock_pool.upsert_item(item.ts_code, name=item.name, industry=item.industry)
+
+    def remove_stock_pool_item(self, ts_code):
+        return self.stock_pool.remove_item(ts_code)
 
     def _send_feishu_text_parts(self, parts):
         webhook = self.settings.notify.feishu_webhook
@@ -242,6 +295,16 @@ class RealReportService:
 
     def list_notify_logs(self, limit=20):
         return self.notify_store.list_recent(limit)
+
+    def poll_rss_and_notify_feishu(self, date=None):
+        result = self.poll_rss()
+        if result.matched_count == 0:
+            return {"rss": result, "sent": False, "reason": "no_matches"}
+        if not self.settings.notify.feishu_webhook:
+            return {"rss": result, "sent": False, "reason": "webhook_not_configured"}
+        text = render_rss_disclosure_reminder_text(date or "今日", result.events, self._stock_pool_names())
+        sent = self._send_feishu_text_parts(split_feishu_text(text))
+        return {"rss": result, "sent": sent, "reason": "ok" if sent else "send_failed"}
 
     def verify_feishu_callback_token(self, token):
         expected = getattr(self.settings.notify, "feishu_verification_token", None)

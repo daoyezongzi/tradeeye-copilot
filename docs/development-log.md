@@ -4,6 +4,46 @@
 
 ## 2026-08-02
 
+### 阶段归档：最终 RSS 提醒与自定义股票池收口
+
+本阶段按正式版收尾范围完成最小闭环：RSS 不再自动抓取 Tushare、不生成研判卡，只识别覆盖池内「今日有财报公告」并发飞书提醒；研究员收到提醒后仍回 TradeEye 工作台手动选择披露日扫描。
+
+已完成：
+
+- RSS 轮询改为 reminder-only：命中财报公告后标记 `MATCHED`，不调用 `analyze_company()`，不再产生 `DATA_PENDING` 重试语义。
+- 新增飞书 RSS 提醒文案 `render_rss_disclosure_reminder_text()`，列出命中公司、报告期与公告标题，并提示回工作台手动扫描。
+- 新增 `POST /api/rss/poll/notify`：轮询 RSS 后按配置发送飞书提醒；无命中、webhook 未配置、发送失败都会返回明确 reason。
+- 新增 GitHub Actions workflow `.github/workflows/rss-feishu-reminder.yml`：支持工作日定时与 `workflow_dispatch` 手动触发，直接运行 `python -m copilot.rss.github_action`，不依赖正在运行的 FastAPI 服务器。
+- 新增 SQLite-backed 自定义股票池 `stock_pool`，首次从 `config.yaml` 的覆盖池、公司名、行业路由初始化，后续编辑持久化到同一个应用 SQLite。
+- 新增股票池 API：`GET /api/stock-pool`、`POST /api/stock-pool`、`DELETE /api/stock-pool/{ts_code}`。
+- 前端新增「股票池」导航页，可添加/移除覆盖池公司；披露日扫描与 RSS 匹配都会读取动态股票池。
+- 顶栏手动「预览飞书摘要」按钮暂时隐藏，后端 preview/send flow 与确认弹窗代码保留，避免正式界面暴露手动推送入口。
+- 披露日扫描延续本轮已完成的开始/暂停/继续/停止控件；数据未就绪、字段不完整或异常时也会生成 `BLOCKED` 卡，Agent 可基于该卡解释原因。
+
+自审结论：
+
+- RSS 只做提醒，不做自动抓取、不自动出卡、不引入点击详情或 retry queue。
+- GitHub Actions RSS 提醒只需要仓库 secrets `FEISHU_WEBHOOK`，可选 `RSS_FEEDS`；不需要 `TRADEEYE_API_BASE_URL` 或服务器。
+- 股票池成为扫描/RSS 的动态数据源；`config.yaml` 仍作为初始种子，不再是唯一运行时来源。
+- 手动飞书推送 UI 已隐藏，但后端接口保留，方便后续需要时重新显式打开。
+- 当前仍未做公网部署、飞书交互卡片按钮、稳定详情 URL、真实服务器 callback。
+
+验证：
+
+```bash
+python -m pytest --basetemp=.pytest_tmp -q
+npm test
+node --check web/app.js && node --check web/agent-chat.js && node --check web/agent-panel.js
+```
+
+结果：
+
+```text
+247 passed
+18 passed
+JavaScript syntax check passed
+```
+
 ### 阶段归档：Agent 前端与导航收口合入 main
 
 本阶段已将 Agent 后端、Agent 前端浮层、导航收口与股票名称优先展示全部合入 `main` 并推送远端；当前远端 `origin/main` 最新提交为 `da08a0c`。

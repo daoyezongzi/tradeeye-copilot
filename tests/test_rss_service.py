@@ -16,7 +16,7 @@ class FakeAnalyzer:
         return self.result
 
 
-def test_rss_poll_service_analyzes_matched_announcements(make_snapshot):
+def test_rss_poll_service_matches_announcements_without_analyzing(make_snapshot):
     xml = """
     <rss><channel>
       <item><title>平安银行：2025年半年度报告</title><link>https://example.com/a</link></item>
@@ -40,13 +40,13 @@ def test_rss_poll_service_analyzes_matched_announcements(make_snapshot):
 
     assert result.seen_count == 1
     assert result.matched_count == 1
-    assert result.analyzed_count == 1
+    assert result.analyzed_count == 0
     assert result.pending_count == 0
-    assert result.events[0].status == "ANALYZED"
-    assert analyzer.calls == [("000001.SZ", "20250630")]
+    assert result.events[0].status == "MATCHED"
+    assert analyzer.calls == []
 
 
-def test_rss_poll_service_marks_pending_when_tushare_not_ready():
+def test_rss_poll_service_does_not_mark_pending_when_tushare_not_ready_because_it_does_not_fetch():
     xml = """
     <rss><channel>
       <item><title>平安银行：2025年半年度报告</title><link>https://example.com/a</link></item>
@@ -68,5 +68,6 @@ def test_rss_poll_service_marks_pending_when_tushare_not_ready():
     result = service.poll()
 
     assert result.analyzed_count == 0
-    assert result.pending_count == 1
-    assert result.events[0].status == "DATA_PENDING"
+    assert result.pending_count == 0
+    assert result.events[0].status == "MATCHED"
+    assert analyzer.calls == []

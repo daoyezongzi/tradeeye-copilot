@@ -2,12 +2,15 @@
 
 ## Repository state
 
-- [x] Chinese README describes the current product path: disclosure-day analysis, single-company analysis, Agent floating layer, evidence drill-down, Feishu preview/send, and internal-only review APIs.
+- [x] Chinese README describes the current product path: disclosure-day analysis, single-company analysis, Agent floating layer, evidence drill-down, hidden manual Feishu send flow, RSS reminder, editable stock pool, and internal-only review APIs.
 - [x] English README is synced with the current product path.
 - [x] Researcher frontend no longer exposes review navigation, review table, CSV export, review label chips, or precision metrics.
+- [x] Manual Feishu preview/send button is hidden from the top bar; backend preview/send flow remains available for later controlled use.
+- [x] Editable stock pool page is available in researcher navigation and feeds disclosure scans/RSS matching.
+- [x] RSS Feishu reminder can run from GitHub Actions without a deployed FastAPI server.
 - [x] Old researcher-review screenshots have been removed from `artifacts/ui-preview/`.
-- [x] `python -m pytest --basetemp=.pytest_tmp -q` passes in the local environment.
-- [x] `npm test` passes in the local environment.
+- [x] `python -m pytest --basetemp=.pytest_tmp -q` passes in the local environment: 247 passed.
+- [x] `npm test` passes in the local environment: 18 passed.
 - [x] `node --check web/app.js && node --check web/agent-chat.js && node --check web/agent-panel.js` passes in the local environment.
 
 ## Secrets and configuration
@@ -28,7 +31,9 @@
 - [ ] Company-name or stock-code single-ticket input opens the correct company card.
 - [ ] Evidence drill-down opens a readable evidence dialog.
 - [ ] Agent button is visible; if LLM is not configured, the panel shows configuration guidance.
-- [ ] Feishu preview renders text; send is enabled only when webhook config allows it.
+- [ ] Manual Feishu preview button remains hidden in the formal UI; if temporarily unhidden for testing, preview renders text and send is enabled only when webhook config allows it.
+- [ ] Stock pool page lists current coverage pool, supports adding/removing a code, and refreshes coverage count/company-name candidates.
+- [ ] RSS reminder workflow has `FEISHU_WEBHOOK` configured as a GitHub secret before enabling scheduled pushes.
 
 ## Benchmark and submission materials
 

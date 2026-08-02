@@ -10,8 +10,8 @@ class JobAnalyzer:
     def __init__(self):
         self.calls = []
 
-    def analyze_disclosure_day_bundle(self, date, progress_callback=None, should_cancel=None, skip_ts_codes=None):
-        self.calls.append((date, progress_callback is not None, should_cancel is not None, frozenset(skip_ts_codes or set())))
+    def analyze_disclosure_day_bundle(self, date, progress_callback=None, should_cancel=None, should_pause=None, skip_ts_codes=None):
+        self.calls.append((date, progress_callback is not None, should_cancel is not None, should_pause is not None, frozenset(skip_ts_codes or set())))
         cards = {
             "603026.SH": CompanyCard(
                 ts_code="603026.SH",
@@ -29,6 +29,20 @@ class JobAnalyzer:
                 max_severity=None,
                 max_score=0.0,
             ),
+            "000001.SZ": CompanyCard(
+                ts_code="000001.SZ",
+                period="20250630",
+                fact_line="数据问题：missing",
+                findings=[],
+                max_severity=None,
+                max_score=0.0,
+                card_status="BLOCKED",
+            ),
+        }
+        statuses = {
+            "603026.SH": CompanyAnalysisStatus.OK,
+            "600151.SH": CompanyAnalysisStatus.OK,
+            "000001.SZ": CompanyAnalysisStatus.DATA_NOT_READY,
         }
         results = []
         for ts_code, card in cards.items():
@@ -44,8 +58,8 @@ class JobAnalyzer:
                         period="20250630",
                     )
                 )
-            results.append((ts_code, "20250630", "generic", CompanyAnalysisResult(status=CompanyAnalysisStatus.OK, message="ok", card=card)))
-        return build_analysis_bundle(date=date, coverage_count=2, results=results)
+            results.append((ts_code, "20250630", "generic", CompanyAnalysisResult(status=statuses[ts_code], message="ok", card=card)))
+        return build_analysis_bundle(date=date, coverage_count=3, results=results)
 
 
 class JobCache:
@@ -88,9 +102,11 @@ def test_real_report_service_starts_job_then_runs_to_completion():
 
     assert finished.status == "completed"
     assert finished.bundle.scan.ok_count == 2
-    assert finished.current_name == "600151.SH"
-    assert service.analyzer.calls == [("20250825", True, True, frozenset())]
-    assert service.cache.company_codes == ["603026.SH", "600151.SH"]
+    blocked = next(card for card in finished.bundle.summary.cards if card.ts_code == "000001.SZ")
+    assert blocked.card_status.value == "BLOCKED"
+    assert finished.current_name == "000001.SZ"
+    assert service.analyzer.calls == [("20250825", True, True, True, frozenset())]
+    assert service.cache.company_codes == ["603026.SH", "000001.SZ", "600151.SH"]
     assert service.cache.daily_dates == ["20250825"]
 
 def test_real_report_service_resumes_from_cancelled_job_without_reprocessing_completed_companies():
@@ -125,11 +141,11 @@ def test_real_report_service_resumes_from_cancelled_job_without_reprocessing_com
     service.run_disclosure_day_job(resumed.job_id)
     finished = service.get_disclosure_day_job(resumed.job_id)
 
-    assert service.analyzer.calls == [("20250825", True, True, frozenset({"603026.SH"}))]
+    assert service.analyzer.calls == [("20250825", True, True, True, frozenset({"603026.SH"}))]
     assert finished.status == "completed"
-    assert finished.bundle.scan.disclosed_count == 2
-    assert [event.ts_code for event in finished.bundle.scan.events] == ["603026.SH", "600151.SH"]
-    assert [card.ts_code for card in finished.bundle.summary.cards] == ["603026.SH", "600151.SH"]
+    assert finished.bundle.scan.disclosed_count == 3
+    assert [event.ts_code for event in finished.bundle.scan.events] == ["603026.SH", "600151.SH", "000001.SZ"]
+    assert {card.ts_code for card in finished.bundle.summary.cards} == {"603026.SH", "600151.SH", "000001.SZ"}
 
 
     service = JobReportService()

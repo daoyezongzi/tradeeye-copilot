@@ -61,7 +61,8 @@ def test_analyze_company_converts_provider_exceptions_to_error_status():
 
     assert result.status == CompanyAnalysisStatus.ERROR
     assert "upstream unavailable" in result.message
-    assert result.card is None
+    assert result.card is not None
+    assert result.card.card_status.value == "BLOCKED"
 
 
 def test_real_report_service_raises_503_when_tushare_token_missing(monkeypatch, tmp_path):
@@ -119,7 +120,7 @@ class PendingThenOkAnalyzer:
         return CompanyAnalysisResult(status=CompanyAnalysisStatus.OK, message="ok", card=build_company_card(Context(ts_code=ts_code, current=snapshot), []))
 
 
-def test_rss_pending_event_is_retried_on_next_manual_poll():
+def test_rss_matched_event_does_not_trigger_tushare_analysis_or_retry():
     xml = """
     <rss><channel>
       <item><title>平安银行：2025年半年度报告</title><link>https://example.com/a</link></item>
@@ -141,9 +142,11 @@ def test_rss_pending_event_is_retried_on_next_manual_poll():
     first = service.poll()
     second = service.poll()
 
-    assert first.pending_count == 1
-    assert second.analyzed_count == 1
-    assert analyzer.calls == 2
+    assert first.matched_count == 1
+    assert first.pending_count == 0
+    assert second.matched_count == 0
+    assert second.analyzed_count == 0
+    assert analyzer.calls == 0
 
 
 def test_rss_poll_result_reports_ignored_entries_and_errors():

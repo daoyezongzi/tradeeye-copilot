@@ -33,6 +33,16 @@ class AutomationDisclosureDayRequest(BaseModel):
     notify: bool = True
 
 
+class RssNotifyRequest(BaseModel):
+    date: str | None = None
+
+
+class RssNotifyResult(BaseModel):
+    rss: RssPollResult
+    sent: bool = False
+    reason: str
+
+
 class AutomationDisclosureDayResult(BaseModel):
     date: str
     job_id: str
@@ -93,6 +103,18 @@ class FeishuPreview(BaseModel):
     reason: str
 
 
+class StockPoolItemResponse(BaseModel):
+    ts_code: str
+    name: str | None = None
+    industry: str | None = None
+
+
+class StockPoolUpsertRequest(BaseModel):
+    ts_code: str
+    name: str | None = None
+    industry: str | None = None
+
+
 class DisclosureJobStatus(BaseModel):
     job_id: str
     date: str
@@ -145,6 +167,10 @@ class ReportService(Protocol):
 
     def cancel_disclosure_day_job(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus: ...
 
+    def pause_disclosure_day_job(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus: ...
+
+    def resume_disclosure_day_job(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus: ...
+
     def prune_disclosure_day_jobs(self, keep_recent: int = 20) -> int: ...
 
     def upsert_review_label(self, label: ReviewLabelRequest) -> StoredReviewLabel: ...
@@ -161,6 +187,8 @@ class ReportService(Protocol):
 
     def poll_rss(self) -> RssPollResult: ...
 
+    def poll_rss_and_notify_feishu(self, date: str | None = None) -> RssNotifyResult: ...
+
     def verify_feishu_callback_token(self, token: str | None) -> bool: ...
 
     def verify_automation_trigger_token(self, token: str | None) -> bool: ...
@@ -168,6 +196,12 @@ class ReportService(Protocol):
     def preview_feishu_disclosure_day(self, date: str) -> FeishuPreview: ...
 
     def notify_feishu_disclosure_day(self, date: str) -> NotifyResult: ...
+
+    def list_stock_pool(self) -> list[StockPoolItemResponse]: ...
+
+    def upsert_stock_pool_item(self, item: StockPoolUpsertRequest) -> StockPoolItemResponse: ...
+
+    def remove_stock_pool_item(self, ts_code: str) -> bool: ...
 
 
 def create_app(report_service: ReportService, agent_service=None) -> FastAPI:
@@ -222,6 +256,19 @@ def create_app(report_service: ReportService, agent_service=None) -> FastAPI:
     def app_meta():
         return report_service.get_meta()
 
+    @app.get("/api/stock-pool", response_model=list[StockPoolItemResponse])
+    def list_stock_pool():
+        return report_service.list_stock_pool()
+
+    @app.post("/api/stock-pool", response_model=StockPoolItemResponse)
+    def upsert_stock_pool_item(item: StockPoolUpsertRequest):
+        item.ts_code = item.ts_code.upper()
+        return report_service.upsert_stock_pool_item(item)
+
+    @app.delete("/api/stock-pool/{ts_code}")
+    def remove_stock_pool_item(ts_code: str):
+        return {"deleted": report_service.remove_stock_pool_item(ts_code.upper())}
+
     @app.post("/api/analyze/company", response_model=CompanyAnalysisResult)
     def analyze_company(request: AnalyzeCompanyRequest):
         return report_service.analyze_company(request.ts_code, request.period)
@@ -264,6 +311,14 @@ def create_app(report_service: ReportService, agent_service=None) -> FastAPI:
     @app.post("/api/disclosure-day/jobs/{job_id}/cancel", response_model=DisclosureJobStatus)
     def cancel_disclosure_day_job(job_id: str, x_tradeeye_owner: str | None = Header(default=None)):
         return report_service.cancel_disclosure_day_job(job_id, owner_id=x_tradeeye_owner)
+
+    @app.post("/api/disclosure-day/jobs/{job_id}/pause", response_model=DisclosureJobStatus)
+    def pause_disclosure_day_job(job_id: str, x_tradeeye_owner: str | None = Header(default=None)):
+        return report_service.pause_disclosure_day_job(job_id, owner_id=x_tradeeye_owner)
+
+    @app.post("/api/disclosure-day/jobs/{job_id}/resume", response_model=DisclosureJobStatus)
+    def resume_disclosure_day_job(job_id: str, x_tradeeye_owner: str | None = Header(default=None)):
+        return report_service.resume_disclosure_day_job(job_id, owner_id=x_tradeeye_owner)
 
     @app.delete("/api/disclosure-day/jobs", response_model=PruneDisclosureJobsResult)
     def prune_disclosure_day_jobs(keep_recent: int = 20):
@@ -311,6 +366,10 @@ def create_app(report_service: ReportService, agent_service=None) -> FastAPI:
     @app.post("/api/rss/poll", response_model=RssPollResult)
     def poll_rss():
         return report_service.poll_rss()
+
+    @app.post("/api/rss/poll/notify", response_model=RssNotifyResult)
+    def poll_rss_and_notify_feishu(request: RssNotifyRequest):
+        return report_service.poll_rss_and_notify_feishu(request.date)
 
     @app.get("/api/notify/logs", response_model=list[NotifyLogEvent])
     def list_notify_logs(limit: int = 20):

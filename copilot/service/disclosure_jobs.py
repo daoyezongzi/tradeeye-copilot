@@ -33,6 +33,7 @@ class DisclosureJobStore:
         self._jobs: dict[str, DisclosureJobStatus] = {}
         self._started_at: dict[str, float] = {}
         self._cancel_requested: set[str] = set()
+        self._pause_requested: set[str] = set()
         self._active_job_id: str | None = None
 
     def start(self, date: str, resume_from_job_id: str | None = None, owner_id: str | None = None) -> DisclosureJobStatus:
@@ -105,6 +106,26 @@ class DisclosureJobStore:
     def should_cancel(self, job_id: str) -> bool:
         return job_id in self._cancel_requested
 
+    def request_pause(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus:
+        status = self.get(job_id, owner_id=owner_id)
+        self._pause_requested.add(job_id)
+        if status.status == "running":
+            status.current_stage = "pause_requested"
+            status.logs.append("pause requested")
+        return self.get(job_id, owner_id=owner_id)
+
+    def request_resume(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus:
+        status = self.get(job_id, owner_id=owner_id)
+        self._pause_requested.discard(job_id)
+        if status.status == "paused":
+            status.status = "running"
+            status.current_stage = "resume_requested"
+            status.logs.append("resume requested")
+        return self.get(job_id, owner_id=owner_id)
+
+    def should_pause(self, job_id: str) -> bool:
+        return job_id in self._pause_requested
+
     def prune_finished(self, keep_recent: int = 20) -> int:
         finished = [
             job
@@ -117,6 +138,7 @@ class DisclosureJobStore:
             self._jobs.pop(job.job_id, None)
             self._started_at.pop(job.job_id, None)
             self._cancel_requested.discard(job.job_id)
+            self._pause_requested.discard(job.job_id)
         return len(to_remove)
 
     def mark_completed(self, job_id: str, bundle: DisclosureAnalysisBundle) -> DisclosureJobStatus:
@@ -131,6 +153,14 @@ class DisclosureJobStore:
         status = self._jobs[job_id]
         status.status = "cancelled"
         status.current_stage = "cancelled"
+        self._apply_bundle_counts(status, bundle)
+        status.bundle = bundle
+        return self.get(job_id)
+
+    def mark_paused(self, job_id: str, bundle: DisclosureAnalysisBundle) -> DisclosureJobStatus:
+        status = self._jobs[job_id]
+        status.status = "paused"
+        status.current_stage = "paused"
         self._apply_bundle_counts(status, bundle)
         status.bundle = bundle
         return self.get(job_id)
@@ -225,6 +255,16 @@ class SQLiteDisclosureJobStore(DisclosureJobStore):
         self._persist(status)
         return status
 
+    def request_pause(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus:
+        status = super().request_pause(job_id, owner_id=owner_id)
+        self._persist(status)
+        return status
+
+    def request_resume(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus:
+        status = super().request_resume(job_id, owner_id=owner_id)
+        self._persist(status)
+        return status
+
     def mark_completed(self, job_id: str, bundle: DisclosureAnalysisBundle) -> DisclosureJobStatus:
         status = super().mark_completed(job_id, bundle)
         self._persist(status)
@@ -232,6 +272,11 @@ class SQLiteDisclosureJobStore(DisclosureJobStore):
 
     def mark_cancelled(self, job_id: str, bundle: DisclosureAnalysisBundle) -> DisclosureJobStatus:
         status = super().mark_cancelled(job_id, bundle)
+        self._persist(status)
+        return status
+
+    def mark_paused(self, job_id: str, bundle: DisclosureAnalysisBundle) -> DisclosureJobStatus:
+        status = super().mark_paused(job_id, bundle)
         self._persist(status)
         return status
 
@@ -257,6 +302,7 @@ class SQLiteDisclosureJobStore(DisclosureJobStore):
             self._jobs.pop(job_id, None)
             self._started_at.pop(job_id, None)
             self._cancel_requested.discard(job_id)
+            self._pause_requested.discard(job_id)
         return len(to_remove)
 
     def _persist(self, status: DisclosureJobStatus) -> None:
@@ -293,3 +339,5 @@ class SQLiteDisclosureJobStore(DisclosureJobStore):
         self._started_at[job_id] = row["started_at"]
         if row["cancel_requested"]:
             self._cancel_requested.add(job_id)
+        if status.status == "paused" or status.current_stage == "pause_requested":
+            self._pause_requested.add(job_id)

@@ -18,6 +18,10 @@ class FakeJobService:
         self.list_owner_ids = []
         self.get_owner_ids = []
         self.cancel_owner_ids = []
+        self.paused_jobs = []
+        self.pause_owner_ids = []
+        self.resumed_jobs = []
+        self.resume_owner_ids = []
 
     def get_company_card(self, ts_code, period):
         return None
@@ -142,6 +146,46 @@ class FakeJobService:
             "bundle": None,
         }
 
+    def pause_disclosure_day_job(self, job_id, owner_id=None):
+        self.pause_owner_ids.append(owner_id)
+        self.paused_jobs.append(job_id)
+        return {
+            "job_id": job_id,
+            "date": "20250825",
+            "status": "running",
+            "processed_count": 1,
+            "total_count": 2,
+            "ok_count": 1,
+            "data_problem_count": 0,
+            "current_ts_code": "603026.SH",
+            "current_name": "石大胜华",
+            "current_period": "20250630",
+            "current_stage": "pause_requested",
+            "elapsed_seconds": 1.2,
+            "logs": [],
+            "bundle": None,
+        }
+
+    def resume_disclosure_day_job(self, job_id, owner_id=None):
+        self.resume_owner_ids.append(owner_id)
+        self.resumed_jobs.append(job_id)
+        return {
+            "job_id": job_id,
+            "date": "20250825",
+            "status": "running",
+            "processed_count": 1,
+            "total_count": 2,
+            "ok_count": 1,
+            "data_problem_count": 0,
+            "current_ts_code": "603026.SH",
+            "current_name": "石大胜华",
+            "current_period": "20250630",
+            "current_stage": "resume_requested",
+            "elapsed_seconds": 1.2,
+            "logs": [],
+            "bundle": None,
+        }
+
     def prune_disclosure_day_jobs(self, keep_recent=20):
         self.prune_requests.append(keep_recent)
         return 3
@@ -169,6 +213,25 @@ def test_disclosure_day_job_routes_start_poll_and_cancel():
     assert cancelled.status_code == 200
     assert cancelled.json()["status"] == "cancelled"
     assert service.cancelled_jobs == ["job-1"]
+
+
+
+def test_disclosure_day_job_routes_pause_and_resume_with_owner_header():
+    service = FakeJobService()
+    client = TestClient(create_app(service))
+    headers = {"X-TradeEye-Owner": "alice"}
+
+    paused = client.post("/api/disclosure-day/jobs/job-1/pause", headers=headers)
+    resumed = client.post("/api/disclosure-day/jobs/job-1/resume", headers=headers)
+
+    assert paused.status_code == 200
+    assert paused.json()["current_stage"] == "pause_requested"
+    assert resumed.status_code == 200
+    assert resumed.json()["current_stage"] == "resume_requested"
+    assert service.paused_jobs == ["job-1"]
+    assert service.resumed_jobs == ["job-1"]
+    assert service.pause_owner_ids == ["alice"]
+    assert service.resume_owner_ids == ["alice"]
 
 
 def test_disclosure_day_job_routes_list_recent_jobs():

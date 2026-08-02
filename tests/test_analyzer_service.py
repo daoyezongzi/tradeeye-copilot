@@ -100,7 +100,8 @@ def test_analyze_company_returns_data_not_ready_when_current_snapshot_missing_re
 
     assert result.status == CompanyAnalysisStatus.DATA_NOT_READY
     assert "Tushare 暂未返回" in result.message
-    assert result.card is None
+    assert result.card is not None
+    assert result.card.card_status.value == "BLOCKED"
 
 def test_analyze_company_returns_data_incomplete_when_hard_check_fails():
     current = snapshot(period="20250630", revenue=-1.0)
@@ -117,7 +118,8 @@ def test_analyze_company_returns_data_incomplete_when_hard_check_fails():
 
     assert result.status == CompanyAnalysisStatus.DATA_INCOMPLETE
     assert "current.revenue is negative" in result.message
-    assert result.card is None
+    assert result.card is not None
+    assert result.card.card_status.value == "BLOCKED"
 
 
 def test_analyze_company_attaches_classification_and_facts():
