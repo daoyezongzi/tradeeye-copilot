@@ -98,7 +98,12 @@ class DisclosureJobStore:
     def request_cancel(self, job_id: str, owner_id: str | None = None) -> DisclosureJobStatus:
         status = self.get(job_id, owner_id=owner_id)
         self._cancel_requested.add(job_id)
-        if status.status == "running":
+        if status.status == "paused":
+            status.status = "cancelled"
+            status.current_stage = "cancelled"
+            status.logs.append("cancel requested")
+            self._pause_requested.discard(job_id)
+        elif status.status == "running":
             status.current_stage = "cancel_requested"
             status.logs.append("cancel requested")
         return self.get(job_id, owner_id=owner_id)

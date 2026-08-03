@@ -1,7 +1,7 @@
 from copilot.models import Finding, Severity
 from copilot.report.builder import CompanyCard
 from copilot.service.analyzer import CompanyAnalysisResult
-from copilot.service.disclosure_jobs import DisclosureJobStore
+from copilot.service.disclosure_jobs import DisclosureJobStore, SQLiteDisclosureJobStore
 from copilot.service.disclosure_scan import CompanyAnalysisStatus, build_analysis_bundle
 
 
@@ -79,6 +79,34 @@ def test_disclosure_job_store_tracks_pause_and_resume_requests():
     assert completed.ok_count == 1
     assert completed.data_problem_count == 0
     assert completed.bundle.summary.red_count == 1
+
+def test_disclosure_job_store_cancels_paused_job_with_partial_bundle():
+    store = DisclosureJobStore(company_names={})
+    job = store.start("20250825")
+    paused = store.mark_paused(job.job_id, _bundle("20250825"))
+
+    cancelled = store.request_cancel(paused.job_id)
+
+    assert cancelled.status == "cancelled"
+    assert cancelled.current_stage == "cancelled"
+    assert cancelled.bundle.scan.disclosed_count == 1
+    assert store.should_pause(job.job_id) is False
+    assert store.should_cancel(job.job_id) is True
+
+def test_sqlite_disclosure_job_store_persists_cancelled_paused_job(tmp_path):
+    path = tmp_path / "jobs.sqlite"
+    store = SQLiteDisclosureJobStore(path)
+    job = store.start("20250825")
+    store.mark_paused(job.job_id, _bundle("20250825"))
+
+    cancelled = store.request_cancel(job.job_id)
+    reloaded = SQLiteDisclosureJobStore(path).get(job.job_id)
+
+    assert cancelled.status == "cancelled"
+    assert reloaded.status == "cancelled"
+    assert reloaded.current_stage == "cancelled"
+    assert reloaded.bundle.scan.disclosed_count == 1
+
 
 def test_disclosure_job_store_blocks_cross_owner_resume_source():
     store = DisclosureJobStore(company_names={})
