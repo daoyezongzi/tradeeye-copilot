@@ -618,6 +618,7 @@ body {
   padding: var(--space-4) var(--space-3);
   cursor: pointer;
   flex-wrap: wrap;
+  user-select: none;
 }
 
 .card__sev {
@@ -684,6 +685,7 @@ body {
   display: none;
   padding: 0 var(--space-3) var(--space-5) var(--space-6);
   animation: card-in 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: text;
 }
 
 .card.open .card__body {
@@ -1040,9 +1042,9 @@ button.text:hover {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .quality__summary {
@@ -1053,7 +1055,7 @@ button.text:hover {
 
 .quality__body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 168px;
+  grid-template-columns: minmax(0, 1fr) 220px;
   gap: var(--space-4);
   align-items: start;
 }
@@ -1133,15 +1135,40 @@ button.text:hover {
 }
 
 .quality-radar svg {
-  width: 148px;
-  height: 148px;
+  width: 220px;
+  height: 220px;
 }
 
-.quality-radar circle,
 .quality-radar line {
   fill: none;
   stroke: var(--md-sys-color-outline-variant);
   stroke-width: 0.8;
+}
+
+.quality-radar circle {
+  stroke: var(--md-sys-color-outline-variant);
+  stroke-width: 0.8;
+}
+
+.quality-radar__ring--normal {
+  fill: color-mix(in srgb, var(--sev-ok) 8%, transparent);
+  stroke: var(--sev-ok);
+  stroke-width: 2;
+  opacity: 0.95;
+}
+
+.quality-radar__ring--watch {
+  fill: color-mix(in srgb, var(--sev-yellow) 10%, transparent);
+  stroke: var(--sev-yellow);
+  stroke-width: 2;
+  opacity: 0.98;
+}
+
+.quality-radar__ring--anomaly {
+  fill: color-mix(in srgb, var(--sev-red) 12%, transparent);
+  stroke: var(--sev-red);
+  stroke-width: 2;
+  opacity: 1;
 }
 
 .quality-radar polygon {
@@ -1152,7 +1179,8 @@ button.text:hover {
 
 .quality-radar__dot {
   stroke: var(--md-sys-color-surface);
-  stroke-width: 1.2;
+  stroke-width: 1.8;
+  filter: drop-shadow(0 1px 2px rgba(20, 20, 19, 0.24));
 }
 
 .quality-radar__dot--normal {
@@ -1172,12 +1200,12 @@ button.text:hover {
   fill: var(--md-sys-color-outline);
 }
 
-.quality-radar__legend {
-  max-width: 18ch;
-  text-align: center;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--md-sys-color-on-surface-muted);
+.quality-radar__label {
+  fill: var(--md-sys-color-on-surface-variant);
+  font-family: var(--sans);
+  font-size: 5.2px;
+  text-anchor: middle;
+  dominant-baseline: middle;
 }
 
 .quality-compare {
@@ -2016,6 +2044,9 @@ dialog::backdrop {
   min-height: 42px;
   max-height: 120px;
   resize: none;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .agent-fab {

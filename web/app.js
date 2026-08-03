@@ -290,30 +290,32 @@ function notify(message, isError = false) {
   }, 4200);
 }
 
-/* 扫描耗时提示：真实耗时未知，按 M3 规范用 indeterminate 进度条 + 已用时计数，不伪造百分比 */
-function createProgress(progressId, messageId, elapsedId) {
+/* 扫描耗时提示：真实耗时未知，按 M3 规范用 indeterminate 进度条，不伪造百分比 */
+function createProgress(progressId, messageId, elapsedId = null) {
   const root = el(progressId);
   const messageEl = el(messageId);
-  const elapsedEl = el(elapsedId);
+  const elapsedEl = elapsedId ? el(elapsedId) : null;
   let timer = null;
 
   return {
     start(message) {
       messageEl.textContent = message;
-      elapsedEl.textContent = "0.0s";
+      if (elapsedEl) elapsedEl.textContent = "0.0s";
       root.hidden = false;
       root.dataset.mode = "indeterminate";
       const startedAt = performance.now();
       clearInterval(timer);
-      timer = setInterval(() => {
-        elapsedEl.textContent = `${((performance.now() - startedAt) / 1000).toFixed(1)}s`;
-      }, 100);
+      if (elapsedEl) {
+        timer = setInterval(() => {
+          elapsedEl.textContent = `${((performance.now() - startedAt) / 1000).toFixed(1)}s`;
+        }, 100);
+      }
       return startedAt;
     },
     stop(startedAt, message) {
       clearInterval(timer);
       const seconds = (performance.now() - startedAt) / 1000;
-      elapsedEl.textContent = `${seconds.toFixed(1)}s`;
+      if (elapsedEl) elapsedEl.textContent = `${seconds.toFixed(1)}s`;
       messageEl.textContent = message;
       // 完成后停掉动画并填满，否则仍在滚动的进度条会被读成还在跑
       root.dataset.mode = "done";
@@ -341,7 +343,7 @@ function setScanControls(next) {
   stopScanButton.textContent = stopping ? "停止中…" : "停止扫描";
 }
 
-const scanProgress = createProgress("scan-progress", "progress-message", "progress-elapsed");
+const scanProgress = createProgress("scan-progress", "progress-message");
 const companyProgress = createProgress("company-progress", "company-progress-message", "company-progress-elapsed");
 
 function displayName(tsCode) {
@@ -541,9 +543,6 @@ async function applyRoute() {
 
   if (route.date) {
     el("disclosure-date").value = toInputDate(route.date);
-    if (!state.bundle || state.bundle.date !== route.date) {
-      await loadDisclosureDay(route.date);
-    }
     return;
   }
   if (route.tsCode) {
@@ -1263,6 +1262,11 @@ function restoreDisclosureJob(job) {
     return;
   }
   if (job.status === "paused") {
+    if (job.bundle) {
+      finishDisclosureJob(job);
+      notify("已恢复暂停时生成的扫描结果");
+      return;
+    }
     state.activeJobId = job.job_id;
     setScanControls("paused");
     scanProgress.start(`已暂停 ${job.date || job.job_id}`);
@@ -1294,7 +1298,6 @@ function renderJobProgress(job) {
   const count = `${job.processed_count}/${job.total_count || "?"}`;
   const stage = job.current_stage || job.status;
   el("progress-message").textContent = `${count} · ${name} · ${stage}`;
-  el("progress-elapsed").textContent = `${Number(job.elapsed_seconds || 0).toFixed(1)}s`;
   setStatus(job);
 }
 
@@ -1336,6 +1339,18 @@ async function stopDisclosureScan() {
   try {
     const job = await api.cancelDisclosureDayJob(state.activeJobId);
     renderJobProgress(job);
+    if (["completed", "cancelled", "failed"].includes(job.status)) {
+      finishDisclosureJob(job);
+      return;
+    }
+    if (job.current_stage === "cancel_requested") {
+      clearInterval(state.jobPollTimer);
+      state.jobPollTimer = null;
+      state.activeJobId = null;
+      setScanControls("idle");
+      scanProgress.stop(performance.now() - Number(job.elapsed_seconds || 0) * 1000, `已请求停止，完成 ${job.processed_count}/${job.total_count || "?"}`);
+      notify("已请求停止扫描");
+    }
   } catch (error) {
     setScanControls(previous);
     throw error;
@@ -1417,7 +1432,33 @@ async function loadQuarterly() {
 async function showEvidence(card, finding) {
   try {
     const evidence = await api.getEvidence(card.ts_code, card.period, finding.rule_id);
-    evidenceContent.textContent = JSON.stringify(evidence, null, 2);
+    if (!evidence?.length) {
+      evidenceContent.replaceChildren(makeEmpty("暂无结构化依据；该 finding 可能来自规则汇总或旧缓存，请重新生成研判卡以补齐字段溯源。"));
+      evidenceDialog.showModal();
+      return;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "evidence-list";
+    for (const item of evidence) {
+      const block = document.createElement("dl");
+      block.className = "evidence-card__grid";
+      for (const [label, value] of [
+        ["来源", item.source],
+        ["字段", item.field],
+        ["期间", item.period],
+        ["数值", item.value],
+      ]) {
+        const row = document.createElement("div");
+        const term = document.createElement("dt");
+        term.textContent = label;
+        const desc = document.createElement("dd");
+        desc.textContent = value == null || value === "" ? "未提供" : String(value);
+        row.append(term, desc);
+        block.append(row);
+      }
+      wrap.append(block);
+    }
+    evidenceContent.replaceChildren(wrap);
     evidenceDialog.showModal();
   } catch (error) {
     notify(error.message, true);
@@ -1530,13 +1571,14 @@ for (const name of VIEWS) {
   el(`tab-${name}`).addEventListener("click", () => navigate(`#/${name}`));
 }
 
-scanButton.addEventListener("click", () => {
+scanButton.addEventListener("click", async () => {
   const date = selectedDate();
   if (!date) {
     notify("请先选择披露日期", true);
     return;
   }
   navigate(`#/day/${date}`);
+  await loadDisclosureDay(date);
 });
 pauseScanButton.addEventListener("click", () => pauseDisclosureScan().catch((error) => notify(error.message, true)));
 resumeScanButton.addEventListener("click", () => resumePausedDisclosureScan().catch((error) => notify(error.message, true)));

@@ -107,6 +107,12 @@ export function formatAgentReference(reference = {}) {
   };
 }
 
+export function agentActionTitle(action = {}) {
+  if (action.action === "refetch_company") return "重新抓取单票研判卡";
+  if (action.action === "rescan_disclosure_day") return "重扫披露日";
+  return "执行建议动作";
+}
+
 function createMessage(role, text, references = [], options = {}) {
   const node = document.createElement("div");
   node.className = `agent-message agent-message--${role}`;
@@ -473,7 +479,7 @@ export function createAgentPanel({ mount = document.body, onSend = null, onActio
       eyebrow.className = "agent-action__eyebrow";
       eyebrow.textContent = "建议动作";
       const strong = document.createElement("strong");
-      strong.textContent = action.action === "refetch_company" ? "重新抓取单票研判卡" : "重扫披露日";
+      strong.textContent = agentActionTitle(action);
       const reason = document.createElement("p");
       reason.textContent = action.reason || "Agent 建议执行此动作。";
       node.append(eyebrow, strong, reason);

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  agentActionTitle,
   agentDisabledGuidance,
   agentLauncherLabel,
   agentRobotIconParts,
@@ -65,6 +66,13 @@ test("formatAgentReference uses missing marker without fabricating values", () =
     { label: "数值", value: "未提供" },
   ]);
 });
+
+test("agentActionTitle keeps action buttons in Chinese", () => {
+  assert.equal(agentActionTitle({ action: "refetch_company" }), "重新抓取单票研判卡");
+  assert.equal(agentActionTitle({ action: "rescan_disclosure_day" }), "重扫披露日");
+  assert.equal(agentActionTitle({ action: "unknown_action" }), "执行建议动作");
+});
+
 
 test("agentDisabledGuidance explains LLM configuration", () => {
   assert.equal(

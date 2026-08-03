@@ -7,6 +7,7 @@ import {
   qualityStatusKey,
   qualityStatusMeta,
   qualitySummaryText,
+  radarAxisLabel,
 } from "./quality-view.js";
 
 test("qualityStatusKey falls back to not evaluated", () => {
@@ -36,6 +37,13 @@ test("comparabilityWarningText explains exploratory comparisons", () => {
     "期间不一致，仅供探索，不作为严格横向比较",
   );
 });
+
+test("radarAxisLabel shortens factor labels for readable axis text", () => {
+  assert.equal(radarAxisLabel({ label: "收入兑现质量" }), "收入兑现");
+  assert.equal(radarAxisLabel({ label: "现金质量" }), "现金质量");
+  assert.equal(radarAxisLabel({ factor_id: "cashflow_quality" }), "现金质量");
+});
+
 
 test("createRadarPoints maps statuses to bands", () => {
   const points = createRadarPoints([

@@ -33,6 +33,28 @@ export function comparabilityWarningText(result) {
   return "仅供探索";
 }
 
+export function radarAxisLabel(factor = {}) {
+  const labels = {
+    revenue_realization_quality: "收入兑现",
+    inventory_match_quality: "存货匹配",
+    cashflow_quality: "现金质量",
+    profitability_stability: "毛利稳定",
+    performance_direction_consistency: "营利一致",
+    recurring_profit_quality: "经常利润",
+  };
+  if (labels[factor.factor_id]) return labels[factor.factor_id];
+  const labelMap = {
+    收入兑现质量: "收入兑现",
+    存货匹配质量: "存货匹配",
+    现金质量: "现金质量",
+    盈利能力稳定性: "毛利稳定",
+    业绩方向一致性: "营利一致",
+    经常性利润质量: "经常利润",
+  };
+  if (labelMap[factor.label]) return labelMap[factor.label];
+  return String(factor.label || "维度").slice(0, 5);
+}
+
 export function createRadarPoints(factors = []) {
   const total = Math.max(factors.length, 1);
   return factors.map((factor, index) => {
@@ -125,16 +147,22 @@ export function renderQualityRadar(factors) {
   const polygon = points.filter((point) => point.radius > 0).map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
   const axes = points.map((point) => `<line x1="50" y1="50" x2="${point.x.toFixed(1)}" y2="${point.y.toFixed(1)}" />`).join("");
   const dots = points.map((point) => `<circle class="quality-radar__dot quality-radar__dot--${point.status.toLowerCase()}" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.2" />`).join("");
+  const labels = points.map((point, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / Math.max(points.length, 1);
+    const x = 50 + Math.cos(angle) * 52;
+    const y = 50 + Math.sin(angle) * 52;
+    return `<text class="quality-radar__label" x="${x.toFixed(1)}" y="${y.toFixed(1)}">${radarAxisLabel(factors[index])}</text>`;
+  }).join("");
   wrap.innerHTML = `
-    <svg viewBox="0 0 100 100" role="img" aria-label="经营质量分档雷达图">
-      <circle cx="50" cy="50" r="42"></circle>
-      <circle cx="50" cy="50" r="30"></circle>
-      <circle cx="50" cy="50" r="18"></circle>
+    <svg viewBox="-8 -8 116 116" role="img" aria-label="经营质量分档雷达图">
+      <circle class="quality-radar__ring quality-radar__ring--normal" cx="50" cy="50" r="42"></circle>
+      <circle class="quality-radar__ring quality-radar__ring--watch" cx="50" cy="50" r="30"></circle>
+      <circle class="quality-radar__ring quality-radar__ring--anomaly" cx="50" cy="50" r="18"></circle>
       <g class="quality-radar__axis">${axes}</g>
       ${polygon ? `<polygon points="${polygon}"></polygon>` : ""}
       <g>${dots}</g>
+      <g>${labels}</g>
     </svg>
-    <div class="quality-radar__legend">外圈正常 · 中圈关注 · 内圈异常 · 灰色不可计算</div>
   `;
   return wrap;
 }
@@ -178,6 +206,7 @@ if (typeof window !== "undefined") {
     qualityStatusKey,
     qualityStatusMeta,
     qualitySummaryText,
+    radarAxisLabel,
     renderQualityCompare,
     renderQualityOverview,
   };
