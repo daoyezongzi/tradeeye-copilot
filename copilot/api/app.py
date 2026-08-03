@@ -62,6 +62,23 @@ class ReviewLabelRequest(BaseModel):
     reviewer: str | None = None
 
 
+class QualityFactorCompareItem(BaseModel):
+    ts_code: str
+    period: str
+
+
+class QualityFactorCompareRequest(BaseModel):
+    items: list[QualityFactorCompareItem]
+    mode: str = "same_period_companies"
+
+
+class QualityFactorCompareResult(BaseModel):
+    mode: str
+    comparability: str
+    warnings: list[str] = Field(default_factory=list)
+    items: list[CompanyCard]
+
+
 class FeishuCallbackAction(BaseModel):
     value: dict = Field(default_factory=dict)
 
@@ -140,6 +157,8 @@ class PruneDisclosureJobsResult(BaseModel):
 
 class ReportService(Protocol):
     def get_company_card(self, ts_code: str, period: str) -> CompanyCard | None: ...
+
+    def compare_quality_factors(self, items: list[QualityFactorCompareItem], mode: str) -> QualityFactorCompareResult: ...
 
     def get_daily_summary(self, date: str) -> DailySummary | None: ...
 
@@ -233,6 +252,10 @@ def create_app(report_service: ReportService, agent_service=None) -> FastAPI:
         if card is None:
             raise HTTPException(status_code=404, detail="company card not found")
         return card
+
+    @app.post("/api/quality-factors/compare", response_model=QualityFactorCompareResult)
+    def compare_quality_factors(request: QualityFactorCompareRequest):
+        return report_service.compare_quality_factors(request.items, request.mode)
 
     @app.get("/api/daily/{date}", response_model=DailySummary)
     def daily_summary(date: str):

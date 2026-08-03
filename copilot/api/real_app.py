@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from copilot.agent.pipeline import AgentService
 from copilot.agent.store import SQLiteAgentStore
 from copilot.agent.tools import ToolRegistry
-from copilot.api.app import AppMeta, FeishuPreview, NotifyResult, create_app
+from copilot.api.app import AppMeta, FeishuPreview, NotifyResult, QualityFactorCompareResult, create_app
 from copilot.config import load_settings
 from copilot.datasource.calendar import TushareDisclosureCalendarClient
 from copilot.datasource.fundamentals import TushareFundamentalsClient
@@ -105,6 +105,27 @@ class RealReportService:
         if card is not None:
             self.cache.put_company(card)
         return card
+
+    def compare_quality_factors(self, items, mode):
+        cards = []
+        warnings = []
+        periods = {item.period for item in items}
+        missing = []
+        for item in items:
+            card = self.get_company_card(item.ts_code, item.period)
+            if card is None:
+                missing.append(f"{item.ts_code} {item.period}")
+                continue
+            cards.append(card)
+        if missing:
+            warnings.append("缺少研判卡：" + "、".join(missing))
+        comparability = "STRICT"
+        if mode == "custom" or len(periods) > 1:
+            comparability = "EXPLORATORY"
+            warnings.append("期间不一致，仅供探索，不作为严格横向比较")
+        if missing:
+            comparability = "INCOMPLETE"
+        return QualityFactorCompareResult(mode=mode, comparability=comparability, warnings=warnings, items=cards)
 
     def _persist_company_card(self, card):
         store = getattr(self, "store", None)
