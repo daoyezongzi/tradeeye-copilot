@@ -145,6 +145,25 @@ function createMessage(role, text, references = [], options = {}) {
   return node;
 }
 
+function createPendingMessage() {
+  const node = createMessage("assistant", "");
+  node.classList.add("agent-message--pending");
+  const body = node.querySelector(".agent-message__body");
+  body.replaceChildren();
+  const label = document.createElement("span");
+  label.className = "agent-thinking__label";
+  label.textContent = "正在思考";
+  const dots = document.createElement("span");
+  dots.className = "agent-thinking__dots";
+  dots.setAttribute("aria-hidden", "true");
+  for (let index = 0; index < 3; index += 1) {
+    const dot = document.createElement("span");
+    dots.append(dot);
+  }
+  body.append(label, dots);
+  return node;
+}
+
 function createRobotIcon() {
   const icon = document.createElement("span");
   icon.className = "agent-robot";
@@ -478,7 +497,7 @@ export function createAgentPanel({ mount = document.body, onSend = null, onActio
       const disabled = pendingCount > 0;
       send.disabled = disabled || input.disabled;
       if (active) {
-        return appendToCurrent(createMessage("assistant", "正在思考…"));
+        return appendToCurrent(createPendingMessage());
       }
       return null;
     },
