@@ -1016,6 +1016,213 @@ button.text:hover {
   border-color: transparent;
 }
 
+/* ---------- 经营质量因子：状态分档，不展示精确分数 ---------- */
+
+.quality {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.quality__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.quality__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.quality__summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--md-sys-color-on-surface-muted);
+}
+
+.quality__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 168px;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.quality__list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.quality-factor {
+  border: 1px solid var(--md-sys-color-outline-soft);
+  border-radius: var(--radius);
+  background: var(--md-sys-color-surface);
+}
+
+.quality-factor > summary {
+  display: grid;
+  grid-template-columns: auto minmax(92px, 0.6fr) minmax(140px, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  cursor: pointer;
+  list-style: none;
+}
+
+.quality-factor > summary::-webkit-details-marker {
+  display: none;
+}
+
+.quality-factor > summary:hover {
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.quality-factor strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.quality-factor__obs {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--md-sys-color-on-surface-muted);
+}
+
+.quality-factor__detail {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3) calc(var(--space-3) + 58px);
+}
+
+.quality-factor__detail p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.quality-factor__meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--md-sys-color-on-surface-muted);
+  overflow-wrap: anywhere;
+}
+
+.quality-factor__evidence {
+  justify-self: start;
+}
+
+.quality-radar {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+}
+
+.quality-radar svg {
+  width: 148px;
+  height: 148px;
+}
+
+.quality-radar circle,
+.quality-radar line {
+  fill: none;
+  stroke: var(--md-sys-color-outline-variant);
+  stroke-width: 0.8;
+}
+
+.quality-radar polygon {
+  fill: color-mix(in srgb, var(--clay) 22%, transparent);
+  stroke: var(--clay);
+  stroke-width: 1.4;
+}
+
+.quality-radar__dot {
+  stroke: var(--md-sys-color-surface);
+  stroke-width: 1.2;
+}
+
+.quality-radar__dot--normal {
+  fill: var(--sev-ok);
+}
+
+.quality-radar__dot--watch {
+  fill: var(--sev-yellow);
+}
+
+.quality-radar__dot--anomaly {
+  fill: var(--sev-red);
+}
+
+.quality-radar__dot--not_evaluated,
+.quality-radar__dot--not_applicable {
+  fill: var(--md-sys-color-outline);
+}
+
+.quality-radar__legend {
+  max-width: 18ch;
+  text-align: center;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--md-sys-color-on-surface-muted);
+}
+
+.quality-compare {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--md-sys-color-surface);
+}
+
+.quality-compare__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.quality-compare__head h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.quality-compare__head p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--md-sys-color-on-surface-muted);
+}
+
+@media (max-width: 900px) {
+  .quality__body {
+    grid-template-columns: 1fr;
+  }
+
+  .quality-factor > summary {
+    grid-template-columns: auto 1fr;
+  }
+
+  .quality-factor__obs {
+    grid-column: 2;
+  }
+}
+
 /* ---------- chip / tag：严重度做色 + 文字双重编码 ---------- */
 
 .chip,

@@ -77,12 +77,22 @@ function selectedDate() {
   return toApiDate(el("disclosure-date").value);
 }
 
-async function waitForAgentModules() {
+async function waitForModules() {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (window.TradeEyeAgentPanel?.createAgentPanel && window.TradeEyeAgentChat?.createAgentChat) return;
+    if (
+      window.TradeEyeAgentPanel?.createAgentPanel &&
+      window.TradeEyeAgentChat?.createAgentChat &&
+      window.TradeEyeQualityView?.renderQualityOverview
+    ) {
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error("Agent 前端模块未加载");
+  throw new Error("前端模块未加载");
+}
+
+async function waitForAgentModules() {
+  await waitForModules();
 }
 
 /* 报告期只有四个法定季末，倒序列出已过去的季末，未到的季末不可能有财报 */
@@ -153,6 +163,14 @@ const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ts_code: tsCode, period }),
+    });
+  },
+
+  async compareQualityFactors(items, mode = "same_period_companies") {
+    return requestJson("/api/quality-factors/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items, mode }),
     });
   },
 
@@ -704,6 +722,53 @@ function renderFactLine(factLine) {
   return wrap;
 }
 
+function renderQualityBlock(card) {
+  if (!card.quality_factors?.length || !window.TradeEyeQualityView?.renderQualityOverview) return null;
+  const block = window.TradeEyeQualityView.renderQualityOverview(card);
+  block.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-quality-rule-id]");
+    if (!button) return;
+    const finding = card.findings.find((item) => item.rule_id === button.dataset.qualityRuleId);
+    if (finding) showEvidence(card, finding);
+  });
+  return block;
+}
+
+function renderStandaloneCompare(card) {
+  if (!window.TradeEyeQualityView?.renderQualityCompare) return null;
+  const wrap = document.createElement("section");
+  wrap.className = "quality-compare quality-compare--placeholder";
+  const head = document.createElement("div");
+  head.className = "quality-compare__head";
+  const title = document.createElement("h3");
+  title.textContent = "经营质量对比";
+  const note = document.createElement("p");
+  note.textContent = "默认使用同一报告期；自定义组合会明确标注可比性下降。";
+  head.append(title, note);
+  const row = document.createElement("div");
+  row.className = "button-row";
+  const selfButton = document.createElement("button");
+  selfButton.type = "button";
+  selfButton.className = "outlined";
+  selfButton.textContent = "查看当前公司对比矩阵";
+  row.append(selfButton);
+  const resultHost = document.createElement("div");
+  selfButton.addEventListener("click", async () => {
+    selfButton.disabled = true;
+    resultHost.replaceChildren(makeEmpty("正在生成对比矩阵…"));
+    try {
+      const result = await api.compareQualityFactors([{ ts_code: card.ts_code, period: card.period }], "same_period_companies");
+      resultHost.replaceChildren(window.TradeEyeQualityView.renderQualityCompare(result));
+    } catch (error) {
+      resultHost.replaceChildren(makeEmpty(error.message));
+    } finally {
+      selfButton.disabled = false;
+    }
+  });
+  wrap.append(head, row, resultHost);
+  return wrap;
+}
+
 /* 覆盖池上百家时卡片网格会变成读不完的瀑布，因此改成默认收起、点击展开的行 */
 function renderCard(card, options = {}) {
   const key = severityKey(card);
@@ -755,6 +820,8 @@ function renderCard(card, options = {}) {
   const body = document.createElement("div");
   body.className = "card__body";
   body.append(renderFactLine(card.fact_line));
+  const qualityBlock = renderQualityBlock(card);
+  if (qualityBlock) body.append(qualityBlock);
 
   const findings = document.createElement("div");
   findings.className = "findings";
@@ -1305,7 +1372,7 @@ async function loadCompany(tsCode, period) {
     setStatus(result);
     companyPermalinkHint.textContent = `固定链接 #/company/${tsCode}/${period}`;
     if (result.card) {
-      companyDetail.replaceChildren(renderCard(result.card, { standalone: true }));
+      companyDetail.replaceChildren(renderCard(result.card, { standalone: true }), renderStandaloneCompare(result.card));
       state.agent?.bindCard(agentCardContext(result.card));
     } else {
       companyDetail.replaceChildren(makeEmpty(`${result.status}：${result.message}`));
