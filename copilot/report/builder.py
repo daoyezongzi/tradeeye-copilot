@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, model_validator
 
 from copilot.eval.backtest import BacktestSummary
+from copilot.quality.factors import QualityFactor, QualityOverview, build_quality_factors, build_quality_overview
 from copilot.models import (
     CardStatus,
     ClassificationResult,
@@ -29,6 +30,9 @@ class CompanyCard(BaseModel):
     card_status: CardStatus = CardStatus.OK
     facts: list[Fact] = Field(default_factory=list)
     rule_results: list[RuleResult] = Field(default_factory=list)
+    quality_factors: list[QualityFactor] = Field(default_factory=list)
+    quality_overview: QualityOverview | None = None
+
     @model_validator(mode="after")
     def validate_status(self) -> "CompanyCard":
         incomplete = any(fact.status.value in {"UNAVAILABLE", "INVALID"} for fact in self.facts)
@@ -154,6 +158,8 @@ def build_company_card(
     )
     facts = build_facts(ctx)
     incomplete = any(fact.status in (FactStatus.UNAVAILABLE, FactStatus.INVALID) for fact in facts)
+    quality_factors = build_quality_factors(ctx, rule_results or [], ordered)
+    quality_overview = build_quality_overview(quality_factors)
     return CompanyCard(
         ts_code=ctx.ts_code,
         period=current.period,
@@ -167,6 +173,8 @@ def build_company_card(
         card_status=CardStatus.PARTIAL if incomplete else CardStatus.OK,
         facts=facts,
         rule_results=rule_results or [],
+        quality_factors=quality_factors,
+        quality_overview=quality_overview,
     )
 
 
