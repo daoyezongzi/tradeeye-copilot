@@ -44,6 +44,25 @@ def test_quality_factors_map_rule_statuses(make_snapshot):
     assert by_id["cashflow_quality"].observations[0].label == "经营现金流/净利润"
 
 
+def test_quality_factor_observations_use_readable_chinese_labels(make_snapshot):
+    ctx = Context(
+        ts_code="000001.SZ",
+        current=make_snapshot(revenue=59.0, net_profit=65.5),
+        prior_year=make_snapshot(period="20240630", revenue=100.0, net_profit=10.0),
+    )
+
+    factors = build_quality_factors(
+        ctx,
+        rule_results=[_rule_result("net_profit_revenue_direction", RuleResultStatus.HIT)],
+        findings=[_finding("net_profit_revenue_direction", Severity.RED)],
+    )
+
+    factor = {item.factor_id: item for item in factors}["performance_direction_consistency"]
+    assert factor.observations[0].label == "营收/净利润同比"
+    assert factor.observations[0].value == "营收 -41.0% / 净利 +555.0%"
+    assert "YoY" not in factor.observations[0].label
+
+
 def test_quality_overview_counts_and_status(make_snapshot):
     ctx = Context(ts_code="000001.SZ", current=make_snapshot())
     factors = build_quality_factors(

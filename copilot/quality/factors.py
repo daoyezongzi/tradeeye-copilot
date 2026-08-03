@@ -53,7 +53,7 @@ FACTOR_SPECS: tuple[dict[str, Any], ...] = (
         "watch": "应收账款增长快于营业收入，需要关注回款质量。",
         "anomaly": "应收账款增长明显快于营业收入，可能意味着回款压力或收入确认质量下降。",
         "not_evaluated": "缺少应收账款、营业收入或去年同期数据，无法判断收入兑现质量。",
-        "observation": "应收YoY-营收YoY",
+        "observation": "应收/营收同比差",
     },
     {
         "factor_id": "inventory_match_quality",
@@ -64,7 +64,7 @@ FACTOR_SPECS: tuple[dict[str, Any], ...] = (
         "watch": "存货增长快于营业收入，需要关注备货与销售匹配度。",
         "anomaly": "存货增长明显快于营业收入，可能意味着库存积压或需求走弱。",
         "not_evaluated": "缺少存货、营业收入或去年同期数据，无法判断存货匹配质量。",
-        "observation": "存货YoY-营收YoY",
+        "observation": "存货/营收同比差",
     },
     {
         "factor_id": "cashflow_quality",
@@ -86,7 +86,7 @@ FACTOR_SPECS: tuple[dict[str, Any], ...] = (
         "watch": "毛利率出现明显同比异动，需要关注价格、成本或产品结构变化。",
         "anomaly": "毛利率出现严重异动。",
         "not_evaluated": "缺少毛利率或去年同期数据，无法判断盈利稳定性。",
-        "observation": "毛利率YoY变动",
+        "observation": "毛利率同比变动",
     },
     {
         "factor_id": "performance_direction_consistency",
@@ -97,7 +97,7 @@ FACTOR_SPECS: tuple[dict[str, Any], ...] = (
         "watch": "营业收入与净利润增长方向存在差异。",
         "anomaly": "营业收入与净利润增长方向背离，需要解释收入质量或费用/减值变化。",
         "not_evaluated": "缺少营业收入、净利润或去年同期数据，无法判断业绩方向一致性。",
-        "observation": "营收YoY vs 净利润YoY",
+        "observation": "营收/净利润同比",
     },
     {
         "factor_id": "profit_sustainability",
@@ -154,7 +154,7 @@ def _observation_value(ctx: Context, rule_id: str) -> tuple[float | str | None, 
         net_profit_yoy = ctx.current.growth_pct("net_profit", ctx.prior_year)
         if revenue_yoy is None or net_profit_yoy is None:
             return None, None
-        return f"营收 {revenue_yoy:+.1f}% / 净利润 {net_profit_yoy:+.1f}%", None
+        return f"营收 {revenue_yoy:+.1f}% / 净利 {net_profit_yoy:+.1f}%", None
     if rule_id == "non_recurring_profit_share":
         if ctx.current.net_profit in (None, 0) or ctx.current.deducted_net_profit is None:
             return None, "%"
