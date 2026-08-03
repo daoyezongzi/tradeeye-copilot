@@ -55,7 +55,7 @@ rules:
     )
     monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
 
-    settings = load_settings(config_path, env_path=tmp_path / "missing.env")
+    settings = load_settings(config_path, env_path=tmp_path / "missing.env", secrets_dir=tmp_path / "missing-secrets")
 
     assert settings.tushare.token is None
 
@@ -90,7 +90,7 @@ rules:
     monkeypatch.delenv("LLM_BASE_URL", raising=False)
     monkeypatch.delenv("LLM_MODEL", raising=False)
 
-    settings = load_settings(config_path, env_path=tmp_path / "missing.env")
+    settings = load_settings(config_path, env_path=tmp_path / "missing.env", secrets_dir=tmp_path / "missing-secrets")
 
     assert settings.llm.base_url == "https://maas.example.com/v1"
     assert settings.llm.model == "ascend-test-model"
@@ -169,7 +169,7 @@ def test_load_settings_reads_llm_from_env(tmp_path, monkeypatch):
     monkeypatch.setenv("LLM_MODEL", "test-model")
     monkeypatch.setenv("LLM_API_KEY", "env-key")
 
-    settings = load_settings(config_path, env_path=tmp_path / "missing.env")
+    settings = load_settings(config_path, env_path=tmp_path / "missing.env", secrets_dir=tmp_path / "missing-secrets")
 
     assert settings.llm.base_url == "https://llm.example.com/v1"
     assert settings.llm.model == "test-model"
@@ -184,7 +184,7 @@ def test_load_settings_reads_llm_api_key_from_generic_env(tmp_path, monkeypatch)
     )
     monkeypatch.setenv("LLM_API_KEY", "generic-key")
 
-    settings = load_settings(config_path, env_path=tmp_path / "missing.env")
+    settings = load_settings(config_path, env_path=tmp_path / "missing.env", secrets_dir=tmp_path / "missing-secrets")
 
     assert settings.llm.api_key == "generic-key"
 
@@ -199,7 +199,7 @@ def test_load_settings_keeps_llm_defaults_without_env(tmp_path, monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
 
-    settings = load_settings(config_path, env_path=tmp_path / "missing.env")
+    settings = load_settings(config_path, env_path=tmp_path / "missing.env", secrets_dir=tmp_path / "missing-secrets")
 
     assert settings.llm.base_url == "https://maas.example.com/v1"
     assert settings.llm.model == "ascend-compatible-model"
