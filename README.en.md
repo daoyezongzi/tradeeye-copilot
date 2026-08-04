@@ -156,8 +156,8 @@ Screenshots of the core modules (light theme; more in `docs/screenshots/`):
 | Research workbench: daily briefing and severity distribution | ![Research workbench](docs/screenshots/workbench.png) |
 | Company research card: facts → anomalies → attribution → market | ![Company research card](docs/screenshots/company-card.png) |
 | Evidence drill-down: raw values per finding | ![Evidence drill-down](docs/screenshots/evidence.png) |
-| Feishu summary preview and send confirmation | ![Feishu preview](docs/screenshots/feishu-preview.png) |
-| Scan diagnostics and data-issue triage | ![Scan diagnostics](docs/screenshots/diagnostics.png) |
+| Agent floating layer: Q&A about the current card | ![Agent floating layer](docs/screenshots/agent-panel.png) |
+| Stock pool: editable coverage pool | ![Stock pool](docs/screenshots/stock-pool.png) |
 
 ## Quick start
 

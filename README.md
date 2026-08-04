@@ -156,8 +156,8 @@ copilot/
 | 研究工作台：当日汇总与严重度分布 | ![研究工作台](docs/screenshots/workbench.png) |
 | 公司研判卡：事实 → 异常 → 归因 → 市场 | ![公司研判卡](docs/screenshots/company-card.png) |
 | 依据溯源弹窗：逐条 finding 的原始数值 | ![依据溯源](docs/screenshots/evidence.png) |
-| 飞书摘要预览与发送确认 | ![飞书预览](docs/screenshots/feishu-preview.png) |
-| 扫描诊断与数据问题排查 | ![扫描诊断](docs/screenshots/diagnostics.png) |
+| Agent 浮层：围绕当前卡片答疑 | ![Agent 浮层](docs/screenshots/agent-panel.png) |
+| 股票池：可编辑覆盖池 | ![股票池](docs/screenshots/stock-pool.png) |
 
 ## 快速开始
 
