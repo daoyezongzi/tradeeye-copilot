@@ -16,6 +16,7 @@
 - [Core design principles](#core-design-principles)
 - [Features](#features)
 - [Architecture](#architecture)
+- [UI preview](#ui-preview)
 - [Quick start](#quick-start)
 - [Usage](#usage)
 - [Configuration reference](#configuration-reference)
@@ -25,9 +26,12 @@
 - [LLM usage (external LLM API)](#llm-usage-external-llm-api)
 - [Agent fact contract](#agent-fact-contract)
 - [Evaluation & benchmark](#evaluation--benchmark)
+- [Measured performance](#measured-performance)
 - [Project structure](#project-structure)
 - [Testing](#testing)
 - [Compliance boundary](#compliance-boundary)
+- [Commercialization](#commercialization)
+- [Source code](#source-code)
 - [Related projects](#related-projects)
 - [Docs & references](#docs--references)
 
@@ -143,6 +147,18 @@ copilot/
 └── models.py       # pydantic models: Context, Evidence, Finding, PeriodSnapshot, ...
 ```
 
+## UI preview
+
+Screenshots of the core modules (light theme; more in `docs/screenshots/`):
+
+| Module | Screenshot |
+| --- | --- |
+| Research workbench: daily briefing and severity distribution | ![Research workbench](docs/screenshots/workbench.png) |
+| Company research card: facts → anomalies → attribution → market | ![Company research card](docs/screenshots/company-card.png) |
+| Evidence drill-down: raw values per finding | ![Evidence drill-down](docs/screenshots/evidence.png) |
+| Feishu summary preview and send confirmation | ![Feishu preview](docs/screenshots/feishu-preview.png) |
+| Scan diagnostics and data-issue triage | ![Scan diagnostics](docs/screenshots/diagnostics.png) |
+
 ## Quick start
 
 ### Prerequisites
@@ -155,6 +171,9 @@ copilot/
 ### Install
 
 ```bash
+# GitCode (primary repository)
+git clone https://gitcode.com/daoyezongzi/TradeEye-Copilot.git
+# or the GitHub mirror
 git clone git@github.com:daoyezongzi/tradeeye-copilot.git
 cd tradeeye-copilot
 python -m venv .venv
@@ -367,6 +386,39 @@ The Agent is integrated into the analyst frontend as a floating Q&A layer rather
 - `eval/manual_review_template.csv` — manual review template (`ts_code, period, rule_id, label, notes, severity, industry`)
 - Review labels and precision remain available through `/api/reviews/*` for internal evaluation; they are not shown in the analyst frontend main path
 
+## Measured performance
+
+Figures come from real Tushare samples and local verification runs (see the [development log](docs/development-log.md)):
+
+### Coverage-pool disclosure scan (2025-08-25, 100-stock smoke pool)
+
+| Metric | Value |
+| --- | --- |
+| Coverage pool / disclosed that day | 100 / 100 |
+| `OK` cards | 100 |
+| Data not ready / incomplete / error | 0 / 0 / 0 |
+
+The 100 non-financial samples triggered no missing-field or industry-mismatch issues; banks use the minimal hard-check branch (`bank` routing) instead of generic corporate fields.
+
+### Feishu formal summary (sent on 2025-08-25)
+
+| Metric | Value |
+| --- | --- |
+| Summary text | 5195 chars / 191 lines |
+| Red / yellow anomalies | 69 / 18 |
+| Data issues | 0 |
+
+### Web workbench
+
+- Evidence drill-down popup renders in **59 ms** (Playwright measurement)
+- Contrast: light minimum **4.89** / dark minimum **5.47**, all passing WCAG AA body text 4.5:1
+- 430px narrow viewport: single column, no horizontal overflow; 1440px viewport has no right-side whitespace (110px → 0)
+- Dependency-free vanilla JS frontend with no build step; the server is FastAPI + SQLite and a full disclosure-day scan runs in a single process
+
+### Test scale
+
+250 pytest (API routes, rule arithmetic, job persistence/resume/pause, Feishu rendering and segmentation, Agent contracts) + 18 Node frontend tests.
+
 ## Project structure
 
 ```text
@@ -395,6 +447,33 @@ Current main-branch validation scale: 250 pytest and 18 Node frontend tests. The
 ## Compliance boundary
 
 TradeEye Copilot only presents facts, rule-triggered anomalies, source evidence, and market-reaction context. It does **not** output investment advice, target prices, or buy/sell ratings.
+
+## Commercialization
+
+### Target scenarios
+
+During A-share earnings disclosure peaks (Q1 / interim / Q3 / annual report windows), many companies disclose on the same day. The researcher bottleneck is not “too many reports to read” but **not knowing which company to question first**. The system produces structured financial facts, rule-triggered anomalies, traceable evidence, and attribution summaries right after disclosure-calendar events land, then pushes the formal summary to Feishu — turning “reading reports one by one” into a priority list sorted by anomaly severity.
+
+### Target customers
+
+- **Buy-side research teams**: PMs and analysts at private funds, securities asset management / proprietary desks, and industry-capital research departments
+- **Profile**: relatively fixed coverage pools (A-share 100-company scale), evidence-traceability requirements, and multi-analyst coordination during disclosure seasons
+- Sensitive to the “deterministic computation + verifiable evidence” value proposition; pure LLM summarizers cannot satisfy their review requirements
+
+### Business model
+
+| Form | Description |
+| --- | --- |
+| Seat-based SaaS subscription | Tiered by analyst seats and coverage-pool size; includes disclosure-day scans, Feishu push, and Agent Q&A |
+| Private deployment | For institutions requiring “data stays in-house”; ships a one-click deployment package and operations docs |
+| Value-added services | Industry rule-pack customization (bank / securities / insurance, driven by real samples), coverage-pool and data-source adaptation |
+
+Core value proposition: **numbers never pass through an LLM, and anomaly determinations and evidence are fully verifiable** — the basis for charging versus “earnings-summary chatbots”.
+
+## Source code
+
+- **GitCode (primary repository)**: <https://gitcode.com/daoyezongzi/TradeEye-Copilot>
+- **GitHub (mirror)**: <https://github.com/daoyezongzi/tradeeye-copilot>
 
 ## Related projects
 

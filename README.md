@@ -16,6 +16,7 @@
 - [核心设计原则](#核心设计原则)
 - [功能特性](#功能特性)
 - [架构](#架构)
+- [界面预览](#界面预览)
 - [快速开始](#快速开始)
 - [使用指南](#使用指南)
 - [配置参考](#配置参考)
@@ -25,9 +26,12 @@
 - [LLM 使用（外部 LLM API）](#llm-使用外部-llm-api)
 - [Agent 事实契约](#agent-事实契约)
 - [评估与基准](#评估与基准)
+- [实测表现](#实测表现)
 - [项目结构](#项目结构)
 - [测试](#测试)
 - [合规边界](#合规边界)
+- [商业化](#商业化)
+- [项目源码](#项目源码)
 - [相关项目](#相关项目)
 - [文档与参考](#文档与参考)
 
@@ -143,6 +147,18 @@ copilot/
 └── models.py       # pydantic 模型：Context、Evidence、Finding、PeriodSnapshot……
 ```
 
+## 界面预览
+
+核心模块截图（浅色主题，更多截图见 `docs/screenshots/`）：
+
+| 模块 | 截图 |
+| --- | --- |
+| 研究工作台：当日汇总与严重度分布 | ![研究工作台](docs/screenshots/workbench.png) |
+| 公司研判卡：事实 → 异常 → 归因 → 市场 | ![公司研判卡](docs/screenshots/company-card.png) |
+| 依据溯源弹窗：逐条 finding 的原始数值 | ![依据溯源](docs/screenshots/evidence.png) |
+| 飞书摘要预览与发送确认 | ![飞书预览](docs/screenshots/feishu-preview.png) |
+| 扫描诊断与数据问题排查 | ![扫描诊断](docs/screenshots/diagnostics.png) |
+
 ## 快速开始
 
 ### 环境要求
@@ -155,6 +171,9 @@ copilot/
 ### 安装
 
 ```bash
+# GitCode（主仓库）
+git clone https://gitcode.com/daoyezongzi/TradeEye-Copilot.git
+# 或 GitHub 镜像
 git clone git@github.com:daoyezongzi/tradeeye-copilot.git
 cd tradeeye-copilot
 python -m venv .venv
@@ -365,6 +384,39 @@ Agent 已接入研究员前端，作为悬浮问答层而不是一级导航页�
 - `eval/manual_review_template.csv` —— 人工复核模板（`ts_code, period, rule_id, label, notes, severity, industry`）
 - 复核标签与 precision 仍通过 `/api/reviews/*` 保留给内部评估；研究员前端不展示复核队列、标注明细或 CSV 入口
 
+## 实测表现
+
+以下数据来自真实 Tushare 样本与本地验证记录（详见 [开发日志](docs/development-log.md)）：
+
+### 覆盖池披露日扫描（2025-08-25，100 支烟测池）
+
+| 指标 | 数值 |
+| --- | --- |
+| 覆盖池 / 当日披露 | 100 / 100 |
+| `OK` 卡片 | 100 |
+| 数据未就绪 / 字段缺失 / 错误 | 0 / 0 / 0 |
+
+100 支非金融样本未触发字段缺失或行业不适配问题；银行股走最小 hard-check 分流（`bank` 路由），避免通用工商企业字段误拒。
+
+### 飞书正式摘要（2025-08-25 实发）
+
+| 指标 | 数值 |
+| --- | --- |
+| 摘要文本 | 5195 字符 / 191 行 |
+| 红色异常 / 黄色异常 | 69 / 18 |
+| 数据问题 | 0 |
+
+### Web 工作台
+
+- 依据溯源弹窗：**59ms 内**打开并渲染 Evidence（Playwright 实测）
+- 对比度：浅色最低 **4.89** / 暗色最低 **5.47**，全部通过 WCAG AA 正文 4.5:1
+- 窄屏 430px 单列无横向溢出；1440px 视口无右侧留白（110px → 0）
+- 前端零依赖原生 JS，无构建步骤；服务端为 FastAPI + SQLite，单进程可跑完整披露日扫描
+
+### 测试规模
+
+250 个 pytest（API 路由、规则算术、job 持久化/续扫/暂停、飞书渲染与分段、Agent 契约）+ 18 个 Node 前端测试。
+
 ## 项目结构
 
 ```text
@@ -393,6 +445,33 @@ node --check web/app.js && node --check web/agent-chat.js && node --check web/ag
 ## 合规边界
 
 TradeEye Copilot 仅呈现事实、规则触发的异常、来源证据与市场反应上下文。它**不**输出投资建议、目标价或买卖评级。
+
+## 商业化
+
+### 落地场景
+
+A 股财报披露高峰季（一季报 / 中报 / 三季报 / 年报窗口），单日可有多家公司集中披露。研究员的瓶颈不是"财报读不完"，而是**不知道先追问谁**。系统在披露日历事件落地后即时产出结构化的财务事实、规则触发的异常、可溯源依据与归因摘要，并通过飞书群在正式摘要发出后同步推送——把"逐份读财报"改造成"按异常严重度排序的优先级清单"。
+
+### 目标客户
+
+- **买方投研团队**：私募基金、券商资管 / 自营、产业资本研究部门的 PM 与分析师
+- **特征**：覆盖池相对固定（A 股 100 家量级）、重视证据可复核、披露季需要多人协同盯盘
+- 对"确定性计算 + 可复核证据"的价值主张敏感；纯 LLM 摘要类产品无法满足其复核要求
+
+### 商业模式
+
+| 形态 | 说明 |
+| --- | --- |
+| 按席位订阅的 SaaS | 按研究员席位与覆盖池规模分层订阅，包含披露日扫描、飞书推送与 Agent 问答 |
+| 私有化部署 | 面向合规要求"数据不出司"的机构，交付一键部署包与运维文档 |
+| 增值服务 | 行业规则包定制（银行 / 券商 / 保险等真实样本驱动）、覆盖池与数据源适配 |
+
+核心价值主张：**数字永不经过 LLM，异常判定与证据全部可复核**——这是区别于"财报摘要聊天机器人"的收费基础。
+
+## 项目源码
+
+- **GitCode（主仓库）**：<https://gitcode.com/daoyezongzi/TradeEye-Copilot>
+- **GitHub（镜像）**：<https://github.com/daoyezongzi/tradeeye-copilot>
 
 ## 相关项目
 
